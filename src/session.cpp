@@ -1,6 +1,6 @@
 #include "obscuraproto/session.hpp"
+#include "obscuraproto/errors.hpp"
 #include <algorithm>
-#include <stdexcept>
 
 namespace ObscuraProto {
 
@@ -14,7 +14,7 @@ Session::Session(Role role, KeyPair server_sign_key)
 
 Session::ClientHello Session::client_initiate_handshake() {
     if (role_ != Role::CLIENT) {
-        throw std::logic_error("Only clients can initiate a handshake.");
+        throw LogicError("Only clients can initiate a handshake.");
     }
 
     // 1. Generate an ephemeral key pair for this session
@@ -30,7 +30,7 @@ Session::ClientHello Session::client_initiate_handshake() {
 
 Session::ServerHello Session::server_respond_to_handshake(const ClientHello& client_hello) {
     if (role_ != Role::SERVER) {
-        throw std::logic_error("Only servers can respond to a handshake.");
+        throw LogicError("Only servers can respond to a handshake.");
     }
 
     // 1. Select a compatible protocol version
@@ -42,7 +42,7 @@ Session::ServerHello Session::server_respond_to_handshake(const ClientHello& cli
         }
     }
     if (!version_supported) {
-        throw std::runtime_error("Client does not support a compatible version.");
+        throw RuntimeError("Client does not support a compatible version.");
     }
 
     // 2. Generate an ephemeral key pair for this session
@@ -68,21 +68,21 @@ Session::ServerHello Session::server_respond_to_handshake(const ClientHello& cli
 
 void Session::client_finalize_handshake(const ServerHello& server_hello) {
     if (role_ != Role::CLIENT) {
-        throw std::logic_error("Only clients can finalize a handshake.");
+        throw LogicError("Only clients can finalize a handshake.");
     }
     if (!ephemeral_kx_kp_) {
-        throw std::logic_error("client_initiate_handshake must be called first.");
+        throw LogicError("client_initiate_handshake must be called first.");
     }
 
     // 1. Verify that the server selected a version we support
     if (server_hello.selected_version != Versions::V1_0) {
-        throw std::runtime_error("Server selected an unsupported version.");
+        throw RuntimeError("Server selected an unsupported version.");
     }
 
     // 2. Verify the signature of the server's ephemeral key
     bool signature_valid = Crypto::verify(server_hello.signature, server_hello.ephemeral_pk.data, server_sign_key_.publicKey);
     if (!signature_valid) {
-        throw std::runtime_error("Server's signature for its ephemeral key is invalid.");
+        throw RuntimeError("Server's signature for its ephemeral key is invalid.");
     }
 
     // 3. Compute the session keys
@@ -102,7 +102,7 @@ bool Session::is_handshake_complete() const {
 
 EncryptedPacket Session::encrypt_payload(const Payload& payload) {
     if (!handshake_complete_) {
-        throw std::logic_error("Handshake must be complete before sending data.");
+        throw LogicError("Handshake must be complete before sending data.");
     }
     
     // Always use the 'tx' key for encryption.
@@ -114,7 +114,7 @@ EncryptedPacket Session::encrypt_payload(const Payload& payload) {
 
 Payload Session::decrypt_packet(const EncryptedPacket& packet) {
     if (!handshake_complete_) {
-        throw std::logic_error("Handshake must be complete before receiving data.");
+        throw LogicError("Handshake must be complete before receiving data.");
     }
 
     // Always use the 'rx' key for decryption.
@@ -126,7 +126,7 @@ Payload Session::decrypt_packet(const EncryptedPacket& packet) {
     // Now, perform the anti-replay check.
     // The received counter must be greater than the last one we processed.
     if (result.counter <= recv_counter_) {
-        throw std::runtime_error("Counter mismatch. Possible replay attack.");
+        throw RuntimeError("Counter mismatch. Possible replay attack.");
     }
 
     // If decryption and counter check were successful, we can now update our counter.

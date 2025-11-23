@@ -90,7 +90,7 @@ namespace ObscuraProto {
          * @param packet The encrypted packet to decrypt.
          * @param key The symmetric decryption key.
          * @return A DecryptedResult object if decryption is successful.
-         * @throws std::runtime_error if decryption fails.
+         * @throws ObscuraProto::RuntimeError if decryption fails.
          */
         static DecryptedResult decrypt(const EncryptedPacket& packet, const byte_vector& key);
     };

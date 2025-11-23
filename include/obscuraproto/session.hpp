@@ -51,14 +51,14 @@ namespace ObscuraProto {
          * @brief [SERVER] Responds to a client's initiation request.
          * @param client_hello The message received from the client.
          * @return A ServerHello message to be sent back to the client.
-         * @throws std::runtime_error if no compatible version is found or keys are invalid.
+         * @throws ObscuraProto::RuntimeError if no compatible version is found or keys are invalid.
          */
         ServerHello server_respond_to_handshake(const ClientHello& client_hello);
 
         /**
          * @brief [CLIENT] Finalizes the handshake after receiving the server's response.
          * @param server_hello The message received from the server.
-         * @throws std::runtime_error if the server's signature is invalid or keys can't be computed.
+         * @throws ObscuraProto::RuntimeError if the server's signature is invalid or keys can't be computed.
          */
         void client_finalize_handshake(const ServerHello& server_hello);
 
@@ -76,7 +76,7 @@ namespace ObscuraProto {
          * @brief Decrypts a received packet.
          * @param packet The packet received from the transport.
          * @return The decrypted application payload.
-         * @throws std::runtime_error on decryption or counter failure.
+         * @throws ObscuraProto::RuntimeError on decryption or counter failure.
          */
         Payload decrypt_packet(const EncryptedPacket& packet);
 

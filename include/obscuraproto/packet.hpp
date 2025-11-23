@@ -4,7 +4,6 @@
 #include <vector>
 #include <cstdint>
 #include <string>
-#include <stdexcept>
 
 namespace ObscuraProto {
 
@@ -48,7 +47,7 @@ namespace ObscuraProto {
          * @brief Deserializes a byte vector into a Payload object.
          * @param data The decrypted data.
          * @return A Payload object.
-         * @throws std::runtime_error if the data is too small.
+         * @throws ObscuraProto::RuntimeError if the data is too small.
          */
         static Payload deserialize(const byte_vector& data);
 

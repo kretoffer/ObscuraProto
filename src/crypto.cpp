@@ -1,6 +1,6 @@
 #include "obscuraproto/crypto.hpp"
 #include <sodium.h>
-#include <stdexcept>
+#include "obscuraproto/errors.hpp"
 #include <arpa/inet.h> // For htons, ntohs
 
 // Helper for 64-bit network byte order conversion
@@ -40,7 +40,7 @@ KeyPair Crypto::generate_sign_keypair() {
 
 Signature Crypto::sign(const byte_vector& message, const PrivateKey& private_key) {
     if (private_key.data.size() != crypto_sign_SECRETKEYBYTES) {
-        throw std::invalid_argument("Invalid private key size for signing.");
+        throw InvalidArgument("Invalid private key size for signing.");
     }
     Signature sig;
     sig.data.resize(crypto_sign_BYTES);
@@ -59,7 +59,7 @@ Crypto::SessionKeys Crypto::client_compute_session_keys(const KeyPair& client_kx
     if (client_kx_kp.publicKey.data.size() != crypto_kx_PUBLICKEYBYTES ||
         client_kx_kp.privateKey.data.size() != crypto_kx_SECRETKEYBYTES ||
         server_eph_pk.data.size() != crypto_kx_PUBLICKEYBYTES) {
-        throw std::invalid_argument("Invalid key sizes for client session key computation.");
+        throw InvalidArgument("Invalid key sizes for client session key computation.");
     }
 
     SessionKeys keys;
@@ -70,7 +70,7 @@ Crypto::SessionKeys Crypto::client_compute_session_keys(const KeyPair& client_kx
                                       client_kx_kp.publicKey.data.data(),
                                       client_kx_kp.privateKey.data.data(),
                                       server_eph_pk.data.data()) != 0) {
-        throw std::runtime_error("Failed to compute client session keys.");
+        throw RuntimeError("Failed to compute client session keys.");
     }
     return keys;
 }
@@ -79,7 +79,7 @@ Crypto::SessionKeys Crypto::server_compute_session_keys(const KeyPair& server_kx
     if (server_kx_kp.publicKey.data.size() != crypto_kx_PUBLICKEYBYTES ||
         server_kx_kp.privateKey.data.size() != crypto_kx_SECRETKEYBYTES ||
         client_eph_pk.data.size() != crypto_kx_PUBLICKEYBYTES) {
-        throw std::invalid_argument("Invalid key sizes for server session key computation.");
+        throw InvalidArgument("Invalid key sizes for server session key computation.");
     }
 
     SessionKeys keys;
@@ -90,14 +90,14 @@ Crypto::SessionKeys Crypto::server_compute_session_keys(const KeyPair& server_kx
                                       server_kx_kp.publicKey.data.data(),
                                       server_kx_kp.privateKey.data.data(),
                                       client_eph_pk.data.data()) != 0) {
-        throw std::runtime_error("Failed to compute server session keys.");
+        throw RuntimeError("Failed to compute server session keys.");
     }
     return keys;
 }
 
 EncryptedPacket Crypto::encrypt(const Payload& payload, uint64_t counter, const byte_vector& key) {
     if (key.size() != crypto_aead_chacha20poly1305_ietf_KEYBYTES) {
-        throw std::invalid_argument("Invalid key size for encryption.");
+        throw InvalidArgument("Invalid key size for encryption.");
     }
 
     byte_vector plaintext = payload.serialize();
@@ -129,7 +129,7 @@ EncryptedPacket Crypto::encrypt(const Payload& payload, uint64_t counter, const 
 
 Crypto::DecryptedResult Crypto::decrypt(const EncryptedPacket& packet, const byte_vector& key) {
     if (key.size() != crypto_aead_chacha20poly1305_ietf_KEYBYTES) {
-        throw std::invalid_argument("Invalid key size for decryption.");
+        throw InvalidArgument("Invalid key size for decryption.");
     }
 
     constexpr size_t NONCE_SIZE = crypto_aead_chacha20poly1305_ietf_NPUBBYTES;
@@ -137,7 +137,7 @@ Crypto::DecryptedResult Crypto::decrypt(const EncryptedPacket& packet, const byt
     constexpr size_t HEADER_SIZE = NONCE_SIZE + COUNTER_SIZE;
 
     if (packet.size() < HEADER_SIZE + crypto_aead_chacha20poly1305_ietf_ABYTES) {
-        throw std::runtime_error("Packet too small to be valid.");
+        throw RuntimeError("Packet too small to be valid.");
     }
 
     // Deconstruct the packet
@@ -161,7 +161,7 @@ Crypto::DecryptedResult Crypto::decrypt(const EncryptedPacket& packet, const byt
             nonce.data(),
             key.data()
         ) != 0) {
-        throw std::runtime_error("Failed to decrypt message. Authentication tag may be invalid.");
+        throw RuntimeError("Failed to decrypt message. Authentication tag may be invalid.");
     }
     
     decrypted_payload_data.resize(decrypted_len); // Adjust to actual decrypted size

@@ -1,4 +1,5 @@
 #include "obscuraproto/packet.hpp"
+#include "obscuraproto/errors.hpp"
 #include <arpa/inet.h> // For htons, ntohs, htonll, ntohll if available
 
 // Helper for 64-bit network byte order conversion
@@ -21,7 +22,7 @@ namespace ObscuraProto {
 
 void Payload::add_param(const byte_vector& param) {
     if (param.size() > UINT16_MAX) {
-        throw std::runtime_error("Parameter size exceeds maximum of 65535 bytes.");
+        throw RuntimeError("Parameter size exceeds maximum of 65535 bytes.");
     }
     uint16_t len = static_cast<uint16_t>(param.size());
     uint16_t be_len = htons(len);
@@ -47,7 +48,7 @@ byte_vector Payload::serialize() const {
 
 Payload Payload::deserialize(const byte_vector& data) {
     if (data.size() < sizeof(OpCode)) {
-        throw std::runtime_error("Data too small to be a valid payload.");
+        throw RuntimeError("Data too small to be a valid payload.");
     }
 
     Payload payload;
