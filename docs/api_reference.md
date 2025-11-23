@@ -1,0 +1,223 @@
+# ObscuraProto API Reference
+
+This document provides a detailed description of every public component in the ObscuraProto library.
+
+---
+
+## `errors.hpp`
+
+Defines the hierarchy of exceptions used in the library.
+
+### `class ObscuraProto::Exception`
+The base class for all library exceptions. Inherits from `std::exception`.
+
+#### `virtual const char* what() const noexcept override`
+Returns the error message.
+
+---
+
+### `class ObscuraProto::RuntimeError`
+An exception thrown for runtime errors.
+- **Examples:** decryption failure, invalid signature, key exchange error.
+
+---
+
+### `class ObscuraProto::LogicError`
+An exception indicating incorrect API usage.
+- **Examples:** attempting to encrypt data before the handshake is complete, calling a server-only method on the client side.
+
+---
+
+### `class ObscuraProto::InvalidArgument`
+An exception thrown when incorrect arguments are passed to a function. Inherits from `LogicError`.
+- **Examples:** passing a key of the wrong size.
+
+---
+
+## `keys.hpp`
+
+Defines basic structures for storing cryptographic keys and signatures.
+
+### `struct ObscuraProto::PublicKey`
+Represents a public key.
+- `std::vector<uint8_t> data`: Raw bytes of the key.
+
+### `struct ObscuraProto::PrivateKey`
+Represents a private key.
+- `std::vector<uint8_t> data`: Raw bytes of the key.
+
+### `struct ObscuraProto::KeyPair`
+Represents a pair consisting of a public and a private key.
+- `PublicKey publicKey`: The public key.
+- `PrivateKey privateKey`: The private key.
+
+### `struct ObscuraProto::Signature`
+Represents a digital signature.
+- `std::vector<uint8_t> data`: Raw bytes of the signature.
+
+---
+
+## `version.hpp`
+
+Defines constants and types for managing the protocol version.
+
+### `using Version = uint16_t`
+An alias for the protocol version type. Version `1.0` is represented as `0x0100`.
+
+### `const std::vector<Version> SUPPORTED_VERSIONS`
+A list of protocol versions supported by the current library version.
+
+---
+
+## `packet.hpp`
+
+Defines the structure of the payload before encryption and after decryption.
+
+### `using byte_vector = std::vector<uint8_t>`
+An alias for representing a byte array.
+
+### `using EncryptedPacket = byte_vector`
+An alias for an encrypted packet. Its content is opaque and ready for network transmission.
+
+### `class ObscuraProto::Payload`
+A class for constructing a payload.
+
+- `OpCode op_code`: A 16-bit operation code that defines the message type.
+- `byte_vector parameters`: Serialized parameters for the given operation.
+
+#### `void add_param(const byte_vector& param)`
+Adds a parameter as a byte array. Uses length-prefix serialization (2 bytes for length + N bytes for data).
+
+#### `void add_param(const std::string& param)`
+Adds a string parameter.
+
+#### `byte_vector serialize() const`
+Serializes the entire `Payload` object (op code + parameters) into a single byte array, ready for encryption.
+
+#### `static Payload deserialize(const byte_vector& data)`
+Deserializes a byte array back into a `Payload` object.
+- **Throws:** `RuntimeError` if the data is corrupted or its size is insufficient.
+
+---
+
+### `class ObscuraProto::Payload::ParamParser`
+A helper class for sequentially extracting parameters from a `Payload`.
+
+#### `explicit ParamParser(const byte_vector& params)`
+Constructor that takes the `parameters` field from a `Payload` object.
+
+#### `bool next_param(byte_vector& out_param)`
+Extracts the next parameter into `out_param`. Returns `true` on success.
+
+#### `bool next_param(std::string& out_param)`
+Extracts the next parameter as a string. Returns `true` on success.
+
+---
+
+## `crypto.hpp`
+
+A static class that provides all low-level cryptographic functions.
+
+### `static int init()`
+Initializes the cryptographic library (libsodium). **Must be called once** at application startup.
+- **Returns:** `0` on success, `-1` on error.
+
+### `static KeyPair generate_kx_keypair()`
+Generates a key pair (X25519) for key exchange using the Diffie-Hellman (ECDH) algorithm.
+
+### `static KeyPair generate_sign_keypair()`
+Generates a key pair (Ed25519) for creating and verifying digital signatures.
+
+### `static Signature sign(const byte_vector& message, const PrivateKey& private_key)`
+Creates a digital signature for a message.
+- **Throws:** `InvalidArgument` if the private key size is incorrect.
+
+### `static bool verify(const Signature& signature, const byte_vector& message, const PublicKey& public_key)`
+Verifies a digital signature.
+- **Returns:** `true` if the signature is valid, otherwise `false`.
+
+### `struct SessionKeys`
+A structure for storing session keys obtained after the handshake.
+- `byte_vector rx`: The key for decrypting incoming messages.
+- `byte_vector tx`: The key for encrypting outgoing messages.
+
+### `static SessionKeys client_compute_session_keys(...)`
+**For the client.** Computes session keys based on its own ephemeral key pair and the server's ephemeral public key.
+- **Throws:** `InvalidArgument` for incorrect key sizes, `RuntimeError` on computation failure.
+
+### `static SessionKeys server_compute_session_keys(...)`
+**For the server.** Computes session keys based on its own ephemeral key pair and the client's ephemeral public key.
+- **Throws:** `InvalidArgument` for incorrect key sizes, `RuntimeError` on computation failure.
+
+### `static EncryptedPacket encrypt(const Payload& payload, uint64_t counter, const byte_vector& key)`
+Encrypts a `Payload` using ChaCha20-Poly1305.
+- `counter`: A message counter for replay attack protection. It is included in the packet as associated data (not encrypted, but protected by the authentication tag).
+- **Returns:** An `EncryptedPacket` in the format `[Nonce][Counter][Ciphertext+Tag]`.
+- **Throws:** `InvalidArgument` for an incorrect key size.
+
+### `struct DecryptedResult`
+The result of a successful decryption.
+- `Payload payload`: The decrypted payload.
+- `uint64_t counter`: The counter extracted from the packet.
+
+### `static DecryptedResult decrypt(const EncryptedPacket& packet, const byte_vector& key)`
+Decrypts a packet. Verifies the authentication tag.
+- **Returns:** `DecryptedResult` on success.
+- **Throws:** `InvalidArgument` for an incorrect key size, `RuntimeError` on decryption failure (invalid tag, corrupted data).
+
+---
+
+## `session.hpp`
+
+The main class for managing session state.
+
+### `enum class Role`
+Defines the role of the current party.
+- `CLIENT`: The session is a client.
+- `SERVER`: The session is a server.
+
+### `class ObscuraProto::Session`
+Manages the session state, including the handshake and data exchange.
+
+#### `Session(Role role, KeyPair server_sign_key)`
+Session constructor.
+- `role`: The role of this session (`CLIENT` or `SERVER`).
+- `server_sign_key`:
+    - For a **server**: the full long-term signing key pair (public and private).
+    - For a **client**: a pair containing only the server's public signing key.
+
+### Handshake Structures
+
+- `struct ClientHello`: A message from the client to the server. Contains a list of supported versions and the client's ephemeral public key.
+- `struct ServerHello`: A message from the server to the client. Contains the selected version, the server's ephemeral public key, and its signature.
+
+### Handshake Methods
+
+#### `ClientHello client_initiate_handshake()`
+**For the client.** Initiates the handshake. Generates an ephemeral key pair and creates a `ClientHello`.
+- **Throws:** `LogicError` if called on the server side.
+
+#### `ServerHello server_respond_to_handshake(const ClientHello& client_hello)`
+**For the server.** Processes a `ClientHello`, generates its own ephemeral pair, computes the session keys, and returns a `ServerHello`.
+- **Throws:** `LogicError` if called on the client side; `RuntimeError` for version incompatibility or crypto operation failure.
+
+#### `void client_finalize_handshake(const ServerHello& server_hello)`
+**For the client.** Finalizes the handshake. Verifies the server's signature and computes the session keys.
+- **Throws:** `LogicError` if called before `client_initiate_handshake`; `RuntimeError` for an invalid signature or crypto operation failure.
+
+### Data Exchange Methods
+
+#### `EncryptedPacket encrypt_payload(const Payload& payload)`
+Encrypts a `Payload`. Automatically increments the sent message counter.
+- **Throws:** `LogicError` if the handshake is not complete.
+
+#### `Payload decrypt_packet(const EncryptedPacket& packet)`
+Decrypts an `EncryptedPacket`. Checks the message counter for replay attack protection.
+- **Returns:** `Payload` on success.
+- **Throws:** `LogicError` if the handshake is not complete; `RuntimeError` on decryption failure or if a replay attack is detected.
+
+### Other Methods
+
+#### `bool is_handshake_complete() const`
+Checks if the handshake has been successfully completed.
+- **Returns:** `true` if the session is ready for data exchange.

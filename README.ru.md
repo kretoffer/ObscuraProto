@@ -143,3 +143,126 @@
 *   **Эллиптическая криптография (ECC):** Основа асимметричных операций, обеспечивающая баланс скорости и безопасности, в частности, с использованием Ed25519 для подписей и X25519 для обмена ключами.
 *   **Функция деривации ключа (KDF):** Критически важный компонент для генерации двух различных ключей (для отправки и приема) из общего секрета.
 *   **Защита от Replay-атак:** Реализована с помощью счетчика сообщений, который включен в состав каждого сообщения и **аутентифицируется с помощью Poly1305**. Это предотвращает повторное воспроизведение старых сообщений.
+
+## 5. Основы использования API
+
+> **Внимание:** Далее описывается низкоуровневый API ("bare metal") библиотеки ObscuraProto. Этот API предназначен для построения более высокоуровневых абстракций и не рекомендуется для прямого использования в большинстве приложений, так как требует аккуратного управления состоянием.
+
+Библиотека предоставляет класс `Session`, который инкапсулирует логику для одного клиентского или серверного соединения. Полный жизненный цикл продемонстрирован в `examples/basic_encryption_example.cpp`.
+
+### Шаг 1: Инициализация
+
+Прежде всего, необходимо инициализировать криптографическую библиотеку (libsodium). Это нужно сделать один раз при запуске вашего приложения.
+
+```cpp
+#include "obscuraproto/crypto.hpp"
+
+if (ObscuraProto::Crypto::init() != 0) {
+    // Обработка сбоя инициализации
+}
+```
+
+### Шаг 2: Настройка ключей
+
+Серверу необходима долгосрочная пара ключей Ed25519 для подписи своих сообщений при рукопожатии. Клиент должен заранее знать публичный ключ подписи сервера, чтобы проверить его подлинность.
+
+```cpp
+// На сервере: генерируем долгосрочный ключ
+auto server_long_term_key = ObscuraProto::Crypto::generate_sign_keypair();
+
+// На клиенте: настраиваем публичный ключ сервера
+ObscuraProto::KeyPair client_view_of_server_key;
+client_view_of_server_key.publicKey = server_long_term_key.publicKey; // Этот ключ должен быть безопасно доставлен клиенту
+```
+
+### Шаг 3: Создание сессий
+
+Создайте объекты `Session` как для клиента, так и для сервера.
+
+```cpp
+#include "obscuraproto/session.hpp"
+
+// На стороне сервера
+ObscuraProto::Session server_session(ObscuraProto::Role::SERVER, server_long_term_key);
+
+// На стороне клиента
+ObscuraProto::Session client_session(ObscuraProto::Role::CLIENT, client_view_of_server_key);
+```
+
+### Шаг 4: Рукопожатие (Handshake)
+
+Рукопожатие — это трехэтапный процесс, включающий обмен эфемерными ключами и подписями.
+
+1.  **Инициация клиента:** Клиент генерирует эфемерный ключ и отправляет сообщение `ClientHello`.
+    ```cpp
+    // Клиент отправляет это серверу
+    auto client_hello = client_session.client_initiate_handshake();
+    ```
+
+2.  **Ответ сервера:** Сервер получает `ClientHello`, проверяет его, генерирует свой эфемерный ключ, подписывает его и вычисляет общие сессионные ключи. Затем он отправляет обратно `ServerHello`.
+    ```cpp
+    // Сервер получает client_hello и отправляет это в ответ
+    auto server_hello = server_session.server_respond_to_handshake(client_hello);
+    // Рукопожатие на стороне сервера завершено
+    assert(server_session.is_handshake_complete());
+    ```
+
+3.  **Завершение на клиенте:** Клиент получает `ServerHello`, проверяет подпись сервера и вычисляет те же самые общие сессионные ключи.
+    ```cpp
+    // Клиент получает server_hello
+    client_session.client_finalize_handshake(server_hello);
+    // Рукопожатие на стороне клиента завершено
+    assert(client_session.is_handshake_complete());
+    ```
+На этом этапе у обеих сторон есть защищенный канал.
+
+### Шаг 5: Передача данных
+
+Для отправки данных необходимо сначала сконструировать `Payload`.
+
+1.  **Создание и шифрование полезной нагрузки:**
+    ```cpp
+    #include "obscuraproto/packet.hpp"
+
+    // На клиенте
+    ObscuraProto::Payload client_payload;
+    client_payload.op_code = 0x1001; // Ваш специфичный для приложения код операции
+    client_payload.add_param("my_username");
+    client_payload.add_param("my_secret_password");
+
+    // Шифруем полезную нагрузку, чтобы получить пакет, готовый к передаче
+    ObscuraProto::EncryptedPacket packet_to_send = client_session.encrypt_payload(client_payload);
+    ```
+    Полученный `packet_to_send` — это `std::vector<uint8_t>`, который можно отправлять по любому сетевому транспорту (TCP, UDP и т.д.).
+
+2.  **Получение и расшифровка пакета:**
+    ```cpp
+    // На сервере, после получения packet_to_send
+    try {
+        ObscuraProto::Payload decrypted_payload = server_session.decrypt_packet(packet_to_send);
+
+        // Разбираем параметры
+        ObscuraProto::Payload::ParamParser parser(decrypted_payload.parameters);
+        std::string username, password;
+        parser.next_param(username);
+        parser.next_param(password);
+        
+        // Используем данные...
+
+    } catch (const ObscuraProto::RuntimeError& e) {
+        // Ошибка расшифровки (например, неверный тег, replay-атака)
+        // Сообщение должно быть отброшено.
+    }
+    ```
+
+### Зависимости
+
+Эта библиотека требует, чтобы **libsodium** была установлена и слинкована с вашим проектом. Если вы используете CMake, вы можете подключить ее следующим образом:
+
+```cmake
+target_link_libraries(your_executable_name
+    PRIVATE
+        obscuraproto
+        sodium
+)
+```

@@ -143,3 +143,126 @@ This algorithm ensures reliable protection of transmitted data within the Obscur
 *   **Elliptic Curve Cryptography (ECC):** The basis of asymmetric operations, providing a balance of speed and security, specifically using Ed25519 for signatures and X25519 for key exchange.
 *   **Key Derivation Function (KDF):** A critically important component for generating two distinct keys (for sending and receiving) from a shared secret.
 *   **Replay Attack Protection:** Implemented using a message counter, which is included in each message and **authenticated using Poly1305**. This prevents the replaying of old messages.
+
+## 5. Basic API Usage
+
+> **Warning:** The following guide describes the low-level "bare metal" API of ObscuraProto. This API is intended for building higher-level abstractions and is not recommended for direct use in most applications, as it requires careful state management.
+
+The library provides a `Session` class that encapsulates the logic for a single client or server connection. The full lifecycle is demonstrated in `examples/basic_encryption_example.cpp`.
+
+### Step 1: Initialization
+
+First, the underlying cryptographic library (libsodium) must be initialized. This must be done once at the start of your application.
+
+```cpp
+#include "obscuraproto/crypto.hpp"
+
+if (ObscuraProto::Crypto::init() != 0) {
+    // Handle initialization failure
+}
+```
+
+### Step 2: Key Setup
+
+The server needs a long-term Ed25519 key pair for signing its handshake messages. The client must know the server's public signing key beforehand to verify its identity.
+
+```cpp
+// On the server: generate a long-term key
+auto server_long_term_key = ObscuraProto::Crypto::generate_sign_keypair();
+
+// On the client: configure the server's public key
+ObscuraProto::KeyPair client_view_of_server_key;
+client_view_of_server_key.publicKey = server_long_term_key.publicKey; // This key must be distributed to the client securely
+```
+
+### Step 3: Session Creation
+
+Create `Session` objects for both the client and the server.
+
+```cpp
+#include "obscuraproto/session.hpp"
+
+// Server-side
+ObscuraProto::Session server_session(ObscuraProto::Role::SERVER, server_long_term_key);
+
+// Client-side
+ObscuraProto::Session client_session(ObscuraProto::Role::CLIENT, client_view_of_server_key);
+```
+
+### Step 4: Handshake
+
+The handshake is a three-step process involving the exchange of ephemeral keys and signatures.
+
+1.  **Client Initiates:** The client generates an ephemeral key and sends a `ClientHello` message.
+    ```cpp
+    // Client sends this to the server
+    auto client_hello = client_session.client_initiate_handshake();
+    ```
+
+2.  **Server Responds:** The server receives the `ClientHello`, verifies it, generates its own ephemeral key, signs it, and computes the shared session keys. It then sends a `ServerHello` back.
+    ```cpp
+    // Server receives client_hello and sends this back
+    auto server_hello = server_session.server_respond_to_handshake(client_hello);
+    // The server's handshake is now complete
+    assert(server_session.is_handshake_complete());
+    ```
+
+3.  **Client Finalizes:** The client receives the `ServerHello`, verifies the server's signature, and computes the same shared session keys.
+    ```cpp
+    // Client receives server_hello
+    client_session.client_finalize_handshake(server_hello);
+    // The client's handshake is now complete
+    assert(client_session.is_handshake_complete());
+    ```
+At this point, both parties have a secure channel.
+
+### Step 5: Data Transfer
+
+To send data, you must first construct a `Payload`.
+
+1.  **Create and Encrypt Payload:**
+    ```cpp
+    #include "obscuraproto/packet.hpp"
+
+    // On the client
+    ObscuraProto::Payload client_payload;
+    client_payload.op_code = 0x1001; // Your application-specific operation code
+    client_payload.add_param("my_username");
+    client_payload.add_param("my_secret_password");
+
+    // Encrypt the payload to get a packet ready for transport
+    ObscuraProto::EncryptedPacket packet_to_send = client_session.encrypt_payload(client_payload);
+    ```
+    The resulting `packet_to_send` is a `std::vector<uint8_t>` that can be sent over any network transport (TCP, UDP, etc.).
+
+2.  **Receive and Decrypt Packet:**
+    ```cpp
+    // On the server, after receiving the packet_to_send
+    try {
+        ObscuraProto::Payload decrypted_payload = server_session.decrypt_packet(packet_to_send);
+
+        // Parse the parameters
+        ObscuraProto::Payload::ParamParser parser(decrypted_payload.parameters);
+        std::string username, password;
+        parser.next_param(username);
+        parser.next_param(password);
+        
+        // Use the data...
+
+    } catch (const ObscuraProto::RuntimeError& e) {
+        // Decryption failed (e.g., invalid tag, replay attack)
+        // The message must be discarded.
+    }
+    ```
+
+### Dependencies
+
+This library requires **libsodium** to be installed and linked to your project. If you are using CMake, you can link it as follows:
+
+```cmake
+target_link_libraries(your_executable_name
+    PRIVATE
+        obscuraproto
+        sodium
+)
+```
