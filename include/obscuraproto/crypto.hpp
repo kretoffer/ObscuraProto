@@ -7,9 +7,6 @@
 
 namespace ObscuraProto {
 
-    // Context for signing messages, as required by libhydrogen.
-    constexpr char SIGN_CONTEXT[] = "ObscuraP";
-
     class Crypto {
     public:
         /**
@@ -19,13 +16,13 @@ namespace ObscuraProto {
         static int init();
 
         /**
-         * @brief Generates a key pair for the key exchange (ECDH).
+         * @brief Generates a key pair for the key exchange (X25519).
          * @return A KeyPair object.
          */
         static KeyPair generate_kx_keypair();
 
         /**
-         * @brief Generates a key pair for digital signatures (ECDSA).
+         * @brief Generates a key pair for digital signatures (Ed25519).
          * @return A KeyPair object.
          */
         static KeyPair generate_sign_keypair();
@@ -56,39 +53,46 @@ namespace ObscuraProto {
         };
 
         /**
-         * @brief [CLIENT] Computes session keys and the first handshake packet.
-         * @param server_pk The server's long-term public signing key.
-         * @param out_packet The generated packet to be sent to the server.
+         * @brief [CLIENT] Computes session keys from its own ephemeral keys and the server's ephemeral public key.
+         * @param client_kx_kp The client's ephemeral key pair.
+         * @param server_eph_pk The server's ephemeral public key.
          * @return The derived session keys.
          */
-        static SessionKeys client_compute_session_keys(const PublicKey& server_pk, byte_vector& out_packet);
+        static SessionKeys client_compute_session_keys(const KeyPair& client_kx_kp, const PublicKey& server_eph_pk);
 
         /**
-         * @brief [SERVER] Computes session keys from the client's packet.
-         * @param client_packet The packet received from the client.
-         * @param server_kp The server's long-term signing key pair.
+         * @brief [SERVER] Computes session keys from its own ephemeral keys and the client's ephemeral public key.
+         * @param server_kx_kp The server's ephemeral key pair.
+         * @param client_eph_pk The client's ephemeral public key.
          * @return The derived session keys.
          */
-        static SessionKeys server_compute_session_keys(const byte_vector& client_packet, const KeyPair& server_kp);
+        static SessionKeys server_compute_session_keys(const KeyPair& server_kx_kp, const PublicKey& client_eph_pk);
 
         /**
-         * @brief Encrypts a payload using ChaCha20-Poly1305 (via hydro_secretbox).
+         * @brief Encrypts a payload using ChaCha20-Poly1305 IETF variant.
          * @param payload The data to encrypt.
-         * @param counter The message counter (used as msg_id).
+         * @param counter The message counter (used as associated data).
          * @param key The symmetric encryption key.
-         * @return An EncryptedPacket containing the ciphertext and header.
+         * @return An EncryptedPacket in the format [Nonce][Counter][Ciphertext+Tag].
          */
         static EncryptedPacket encrypt(const Payload& payload, uint64_t counter, const byte_vector& key);
 
         /**
-         * @brief Decrypts an envelope using ChaCha20-Poly1305 (via hydro_secretbox).
+         * @brief A structure to hold the result of a decryption operation.
+         */
+        struct DecryptedResult {
+            Payload payload;
+            uint64_t counter;
+        };
+
+        /**
+         * @brief Decrypts a packet using ChaCha20-Poly1305 IETF variant.
          * @param packet The encrypted packet to decrypt.
-         * @param counter The expected message counter (used as msg_id).
          * @param key The symmetric decryption key.
-         * @return A Payload object if decryption is successful.
+         * @return A DecryptedResult object if decryption is successful.
          * @throws std::runtime_error if decryption fails.
          */
-        static Payload decrypt(const EncryptedPacket& packet, uint64_t counter, const byte_vector& key);
+        static DecryptedResult decrypt(const EncryptedPacket& packet, const byte_vector& key);
     };
 
 } // namespace ObscuraProto
