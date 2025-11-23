@@ -16,18 +16,18 @@ This phase is used for the client's first connection to the server and includes 
 
 2.  **Server Response and Authentication (Server Hello):**
     *   The server receives the list of versions and selects the highest one it also supports. If no common versions are found, the server terminates the connection. All further communication proceeds according to the rules of the selected version.
-    *   The server possesses a long-term **ECDSA** (Elliptic Curve Digital Signature Algorithm) key pair. Its public key must be known to the client.
+    *   The server possesses a long-term **Ed25519** key pair. Its public key must be known to the client.
     *   The server generates its ephemeral **ECDH** key pair.
-    *   The server signs its public ECDH key with its private ECDSA key.
-    *   The server sends the client: the **selected protocol version**, its public ECDSA key, its public ECDH key, and the digital signature.
+    *   The server signs its public ECDH key with its private **Ed25519** key.
+    *   The server sends the client: the **selected protocol version**, its public ECDH key, and the digital signature.
 
 3.  **Client Authentication and Exchange Completion:**
     *   The client verifies that the version selected by the server is in its list of supported versions.
-    *   The client verifies the signature of the public ECDH key using the server's public ECDSA key.
+    *   The client verifies the signature of the public ECDH key using the server's public **Ed25519** key.
 
 4.  **Shared Secret Generation:**
     *   The client and server compute a shared secret `S` using the ECDH protocol.
-    *   The secret `S` is passed through a **Key Derivation Function (KDF)**, such as HKDF, to generate a **single symmetric key** for the ChaCha20-Poly1305 cipher.
+    *   The secret `S` is passed through a **Key Derivation Function (KDF)**, such as HKDF, to generate **two symmetric keys** (one for sending, one for receiving) for the ChaCha20-Poly1305 cipher.
 
 5.  **Session Ticket Creation:** After a successful handshake, the server can create a **Session Ticket** for session resumption. This ticket contains session information, encrypted with a key known only to the server, and sends it to the client. The ticket **must include information about the protocol version** on which the session was established.
 
@@ -135,11 +135,11 @@ This algorithm ensures reliable protection of transmitted data within the Obscur
 
 *   **Perfect Forward Secrecy (PFS):** Maintained thanks to ephemeral ECDH keys.
 *   **Performance:** ECC provides high speed for asymmetric operations. ChaCha20-Poly1305 is a very fast symmetric cipher. Session resumption speeds up repeated connections.
-*   **Trust Model:** The protocol assumes that the client trusts the server's public ECDSA key in advance.
+*   **Trust Model:** The protocol assumes that the client trusts the server's public Ed25519 key in advance.
 
 ## 4. Key Decisions
 
 *   **ChaCha20-Poly1305:** A modern, high-performance AEAD cipher that provides both confidentiality and data integrity.
-*   **Elliptic Curve Cryptography (ECC):** The basis of asymmetric operations, providing a balance of speed and security.
-*   **Key Derivation Function (HKDF):** A critically important component for generating keys from a shared secret.
+*   **Elliptic Curve Cryptography (ECC):** The basis of asymmetric operations, providing a balance of speed and security, specifically using Ed25519 for signatures and X25519 for key exchange.
+*   **Key Derivation Function (KDF):** A critically important component for generating two distinct keys (for sending and receiving) from a shared secret.
 *   **Replay Attack Protection:** Implemented using a message counter, which is included in each message and **authenticated using Poly1305**. This prevents the replaying of old messages.
