@@ -4,6 +4,7 @@
 #include "crypto.hpp"
 #include "packet.hpp"
 #include "version.hpp"
+#include "handshake_messages.hpp"
 
 #include <memory>
 
@@ -26,18 +27,6 @@ namespace ObscuraProto {
          *                        For a client, a key pair with only the public key part filled.
          */
         Session(Role role, KeyPair server_sign_key);
-
-        // --- Handshake Data Structures ---
-        struct ClientHello {
-            std::vector<Version> supported_versions;
-            PublicKey ephemeral_pk; // Client's ephemeral public key
-        };
-
-        struct ServerHello {
-            Version selected_version;
-            PublicKey ephemeral_pk; // Server's ephemeral public key
-            Signature signature;    // Signature of the server's ephemeral_pk
-        };
 
         // --- Handshake Methods ---
 

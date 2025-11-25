@@ -12,7 +12,7 @@ Session::Session(Role role, KeyPair server_sign_key)
 
 // --- Handshake ---
 
-Session::ClientHello Session::client_initiate_handshake() {
+ClientHello Session::client_initiate_handshake() {
     if (role_ != Role::CLIENT) {
         throw LogicError("Only clients can initiate a handshake.");
     }
@@ -28,7 +28,7 @@ Session::ClientHello Session::client_initiate_handshake() {
     return hello;
 }
 
-Session::ServerHello Session::server_respond_to_handshake(const ClientHello& client_hello) {
+ServerHello Session::server_respond_to_handshake(const ClientHello& client_hello) {
     if (role_ != Role::SERVER) {
         throw LogicError("Only servers can respond to a handshake.");
     }
