@@ -11,7 +11,6 @@ namespace ObscuraProto {
     using byte_vector = std::vector<uint8_t>;
 
     // An encrypted packet is just a vector of bytes.
-    // The format is managed internally by hydro_secretbox.
     using EncryptedPacket = byte_vector;
 
     /**
@@ -26,18 +25,6 @@ namespace ObscuraProto {
         byte_vector parameters;
 
         /**
-         * @brief Adds a parameter using the length-prefix method.
-         * @param param The parameter to add (as a byte vector).
-         */
-        void add_param(const byte_vector& param);
-
-        /**
-         * @brief Adds a string parameter using the length-prefix method.
-         * @param param The string to add.
-         */
-        void add_param(const std::string& param);
-
-        /**
          * @brief Serializes the payload into a single byte vector.
          * @return A byte vector ready for encryption.
          */
@@ -50,32 +37,41 @@ namespace ObscuraProto {
          * @throws ObscuraProto::RuntimeError if the data is too small.
          */
         static Payload deserialize(const byte_vector& data);
+    };
 
-        /**
-         * @brief A helper class to parse parameters from a payload.
-         */
-        class ParamParser {
-        public:
-            explicit ParamParser(const byte_vector& params);
+    /**
+     * @brief A helper class to build a Payload with parameters.
+     */
+    class PayloadBuilder {
+    public:
+        explicit PayloadBuilder(Payload::OpCode op_code);
 
-            /**
-             * @brief Gets the next parameter.
-             * @param out_param The byte vector to store the next parameter.
-             * @return True if a parameter was extracted, false otherwise.
-             */
-            bool next_param(byte_vector& out_param);
+        PayloadBuilder& add_param(const byte_vector& param);
+        PayloadBuilder& add_param(const std::string& param);
+        PayloadBuilder& add_param(uint32_t param);
 
-            /**
-             * @brief Gets the next parameter as a string.
-             * @param out_param The string to store the next parameter.
-             * @return True if a parameter was extracted, false otherwise.
-             */
-            bool next_param(std::string& out_param);
+        Payload build();
 
-        private:
-            const byte_vector& params_data;
-            size_t offset = 0;
-        };
+    private:
+        Payload payload_;
+    };
+
+    /**
+     * @brief A helper class to parse parameters from a payload.
+     */
+    class PayloadReader {
+    public:
+        explicit PayloadReader(const Payload& payload);
+
+        byte_vector read_param_bytes();
+        std::string read_param_string();
+        uint32_t read_param_u32();
+
+        bool has_more() const;
+
+    private:
+        const byte_vector& params_data_;
+        size_t offset_ = 0;
     };
 
 } // namespace ObscuraProto

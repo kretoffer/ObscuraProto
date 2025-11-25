@@ -62,10 +62,10 @@ int main() {
 
     // 6. Data Transfer: Client -> Server
     std::cout << "\n--- Testing Data Transfer (Client to Server) ---" << std::endl;
-    ObscuraProto::Payload client_payload;
-    client_payload.op_code = 0x1001;
-    client_payload.add_param("my_username");
-    client_payload.add_param("my_very_secret_password");
+    ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
+        .add_param("my_username")
+        .add_param("my_very_secret_password")
+        .build();
 
     std::cout << "[CLIENT] Serialized payload to send:" << std::endl;
     print_bytes("  Payload Data", client_payload.serialize());
@@ -83,10 +83,9 @@ int main() {
         std::cout << "[SERVER] Message decrypted successfully!" << std::endl;
         assert(decrypted_payload.op_code == client_payload.op_code);
         
-        ObscuraProto::Payload::ParamParser parser(decrypted_payload.parameters);
-        std::string username, password;
-        assert(parser.next_param(username));
-        assert(parser.next_param(password));
+        ObscuraProto::PayloadReader reader(decrypted_payload);
+        std::string username = reader.read_param_string();
+        std::string password = reader.read_param_string();
 
         std::cout << "  OpCode: 0x" << std::hex << decrypted_payload.op_code << std::dec << std::endl;
         std::cout << "  Username: " << username << std::endl;

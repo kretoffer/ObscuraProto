@@ -225,10 +225,11 @@ ObscuraProto::Session client_session(ObscuraProto::Role::CLIENT, client_view_of_
     #include "obscuraproto/packet.hpp"
 
     // На клиенте
-    ObscuraProto::Payload client_payload;
-    client_payload.op_code = 0x1001; // Ваш специфичный для приложения код операции
-    client_payload.add_param("my_username");
-    client_payload.add_param("my_secret_password");
+    ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
+        .add_param("my_username")
+        .add_param("my_secret_password")
+        .add_param((uint32_t)1) // Пример добавления целочисленного параметра
+        .build();
 
     // Шифруем полезную нагрузку, чтобы получить пакет, готовый к передаче
     ObscuraProto::EncryptedPacket packet_to_send = client_session.encrypt_payload(client_payload);
@@ -242,12 +243,13 @@ ObscuraProto::Session client_session(ObscuraProto::Role::CLIENT, client_view_of_
         ObscuraProto::Payload decrypted_payload = server_session.decrypt_packet(packet_to_send);
 
         // Разбираем параметры
-        ObscuraProto::Payload::ParamParser parser(decrypted_payload.parameters);
-        std::string username, password;
-        parser.next_param(username);
-        parser.next_param(password);
+        ObscuraProto::PayloadReader reader(decrypted_payload);
+        std::string username = reader.read_param_string();
+        std::string password = reader.read_param_string();
+        uint32_t login_attempts = reader.read_param_u32(); // Читаем целочисленный параметр
         
         // Используем данные...
+        std::cout << "Получено: User=" << username << ", Pass=" << password << ", Attempts=" << login_attempts << std::endl;
 
     } catch (const ObscuraProto::RuntimeError& e) {
         // Ошибка расшифровки (например, неверный тег, replay-атака)
@@ -293,10 +295,17 @@ ObscuraProto::net::WsServerWrapper server(server_long_term_key);
 server.set_on_payload_callback([&server](auto hdl, ObscuraProto::Payload payload) {
     std::cout << "[SERVER] Получена полезная нагрузка." << std::endl;
     
+    // Пример чтения смешанных параметров
+    ObscuraProto::PayloadReader reader(payload);
+    std::string username = reader.read_param_string();
+    std::string password = reader.read_param_string();
+    uint32_t login_attempts = reader.read_param_u32();
+    std::cout << "[SERVER] Расшифровано: User=" << username << ", Pass=" << password << ", Attempts=" << login_attempts << std::endl;
+
     // Создаем и отправляем ответ
-    ObscuraProto::Payload response_payload;
-    response_payload.op_code = 0x2002;
-    response_payload.add_param("Привет от сервера!");
+    ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x2002)
+        .add_param("Привет от сервера!")
+        .build();
     server.send(hdl, response_payload);
 });
 
@@ -317,15 +326,20 @@ ObscuraProto::net::WsClientWrapper client(client_view_of_server_key);
 // Устанавливаем callback на момент, когда защищенный канал будет готов
 client.set_on_ready_callback([&client]() {
     std::cout << "[CLIENT] Рукопожатие завершено. Отправка сообщения..." << std::endl;
-    ObscuraProto::Payload client_payload;
-    client_payload.op_code = 0x1001;
-    client_payload.add_param("my_username");
+    ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
+        .add_param("my_username")
+        .add_param("my_password")
+        .add_param((uint32_t)1)
+        .build();
     client.send(client_payload);
 });
 
 // Устанавливаем callback для обработки данных от сервера
 client.set_on_payload_callback([](ObscuraProto::Payload payload) {
     std::cout << "[CLIENT] Получен ответ от сервера." << std::endl;
+    ObscuraProto::PayloadReader reader(payload);
+    std::string message = reader.read_param_string();
+    std::cout << "[CLIENT] Расшифрованный ответ: " << message << std::endl;
 });
 
 // Подключаемся к серверу

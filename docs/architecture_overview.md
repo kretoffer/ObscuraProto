@@ -37,11 +37,11 @@ This describes the structure of data packets exchanged between parties *before* 
 - **`Payload`**: The key class representing the "payload" — commands and data in unencrypted form.
     - **`op_code`**: "Operation code". A `uint16_t` that denotes the command type (e.g., 1 - "authorize", 2 - "send message").
     - **`parameters`**: Data related to this command.
-    - **`add_param(...)`**: Methods for adding parameters. It uses length-prefixed serialization (the length of each parameter is written before it), which makes it easy to separate them when reading.
+    - **`PayloadBuilder`**: A helper class for fluently constructing `Payload` objects. It provides methods like `add_param(std::string)`, `add_param(uint32_t)`, `add_param(byte_vector)` which use length-prefixed serialization (the length of each parameter is written before it), making it easy to separate them when reading.
+    - **`PayloadReader`**: A helper class that makes it convenient to extract parameters one by one from a received `Payload`. It provides methods like `read_param_string()`, `read_param_u32()`, `read_param_bytes()`.
     - **`serialize()` / `deserialize()`**: Functions that turn a `Payload` object into a single byte array and back. `deserialize()` throws an `ObscuraProto::RuntimeError` if the data is malformed.
-    - **`ParamParser`**: A helper class that makes it convenient to extract parameters one by one from a received `Payload`.
 
-**Purpose:** `Payload` is the "envelope" where you put a command (`op_code`) and its data (`parameters`) before sealing it (encrypting).
+**Purpose:** `Payload` is the "envelope" where you put a command (`op_code`) and its data (`parameters`) before sealing it (encrypting). `PayloadBuilder` and `PayloadReader` simplify the process of preparing and interpreting this envelope.
 
 ---
 

@@ -225,10 +225,11 @@ To send data, you must first construct a `Payload`.
     #include "obscuraproto/packet.hpp"
 
     // On the client
-    ObscuraProto::Payload client_payload;
-    client_payload.op_code = 0x1001; // Your application-specific operation code
-    client_payload.add_param("my_username");
-    client_payload.add_param("my_secret_password");
+    ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
+        .add_param("my_username")
+        .add_param("my_secret_password")
+        .add_param((uint32_t)1) // Example of adding an integer parameter
+        .build();
 
     // Encrypt the payload to get a packet ready for transport
     ObscuraProto::EncryptedPacket packet_to_send = client_session.encrypt_payload(client_payload);
@@ -242,12 +243,13 @@ To send data, you must first construct a `Payload`.
         ObscuraProto::Payload decrypted_payload = server_session.decrypt_packet(packet_to_send);
 
         // Parse the parameters
-        ObscuraProto::Payload::ParamParser parser(decrypted_payload.parameters);
-        std::string username, password;
-        parser.next_param(username);
-        parser.next_param(password);
+        ObscuraProto::PayloadReader reader(decrypted_payload);
+        std::string username = reader.read_param_string();
+        std::string password = reader.read_param_string();
+        uint32_t login_attempts = reader.read_param_u32(); // Read the integer parameter
         
         // Use the data...
+        std::cout << "Received username: " << username << ", password: " << password << ", attempts: " << login_attempts << std::endl;
 
     } catch (const ObscuraProto::RuntimeError& e) {
         // Decryption failed (e.g., invalid tag, replay attack)
@@ -293,10 +295,17 @@ ObscuraProto::net::WsServerWrapper server(server_long_term_key);
 server.set_on_payload_callback([&server](auto hdl, ObscuraProto::Payload payload) {
     std::cout << "[SERVER] Received a payload." << std::endl;
     
+    // Example of reading mixed parameters
+    ObscuraProto::PayloadReader reader(payload);
+    std::string username = reader.read_param_string();
+    std::string password = reader.read_param_string();
+    uint32_t login_attempts = reader.read_param_u32();
+    std::cout << "[SERVER] Decrypted: User=" << username << ", Pass=" << password << ", Attempts=" << login_attempts << std::endl;
+
     // Create and send a response
-    ObscuraProto::Payload response_payload;
-    response_payload.op_code = 0x2002;
-    response_payload.add_param("Hello from server!");
+    ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x2002)
+        .add_param("Hello from server!")
+        .build();
     server.send(hdl, response_payload);
 });
 
@@ -317,15 +326,20 @@ ObscuraProto::net::WsClientWrapper client(client_view_of_server_key);
 // Set a callback for when the secure channel is ready
 client.set_on_ready_callback([&client]() {
     std::cout << "[CLIENT] Handshake complete. Sending a message..." << std::endl;
-    ObscuraProto::Payload client_payload;
-    client_payload.op_code = 0x1001;
-    client_payload.add_param("my_username");
+    ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
+        .add_param("my_username")
+        .add_param("my_password")
+        .add_param((uint32_t)1)
+        .build();
     client.send(client_payload);
 });
 
 // Set a callback to process data from the server
 client.set_on_payload_callback([](ObscuraProto::Payload payload) {
     std::cout << "[CLIENT] Received a response from the server." << std::endl;
+    ObscuraProto::PayloadReader reader(payload);
+    std::string message = reader.read_param_string();
+    std::cout << "[CLIENT] Decrypted response: " << message << std::endl;
 });
 
 // Connect to the server

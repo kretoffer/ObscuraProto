@@ -71,7 +71,7 @@ A list of protocol versions supported by the current library version.
 
 ## `packet.hpp`
 
-Defines the structure of the payload before encryption and after decryption.
+Defines the structure of the payload before encryption and after decryption, and provides helper classes for building and parsing payloads.
 
 ### `using byte_vector = std::vector<uint8_t>`
 An alias for representing a byte array.
@@ -80,16 +80,10 @@ An alias for representing a byte array.
 An alias for an encrypted packet. Its content is opaque and ready for network transmission.
 
 ### `class ObscuraProto::Payload`
-A class for constructing a payload.
+A class that holds the operation code and serialized parameters.
 
 - `OpCode op_code`: A 16-bit operation code that defines the message type.
 - `byte_vector parameters`: Serialized parameters for the given operation.
-
-#### `void add_param(const byte_vector& param)`
-Adds a parameter as a byte array. Uses length-prefix serialization (2 bytes for length + N bytes for data).
-
-#### `void add_param(const std::string& param)`
-Adds a string parameter.
 
 #### `byte_vector serialize() const`
 Serializes the entire `Payload` object (op code + parameters) into a single byte array, ready for encryption.
@@ -100,17 +94,55 @@ Deserializes a byte array back into a `Payload` object.
 
 ---
 
-### `class ObscuraProto::Payload::ParamParser`
-A helper class for sequentially extracting parameters from a `Payload`.
+### `class ObscuraProto::PayloadBuilder`
+A helper class for fluently constructing `Payload` objects with various parameters.
 
-#### `explicit ParamParser(const byte_vector& params)`
-Constructor that takes the `parameters` field from a `Payload` object.
+#### `explicit PayloadBuilder(Payload::OpCode op_code)`
+Constructor. Initializes the builder with the specified operation code.
 
-#### `bool next_param(byte_vector& out_param)`
-Extracts the next parameter into `out_param`. Returns `true` on success.
+#### `PayloadBuilder& add_param(const byte_vector& param)`
+Adds a parameter as a byte array. Uses length-prefix serialization (2 bytes for length + N bytes for data).
+- **Returns:** A reference to the builder for method chaining.
+- **Throws:** `RuntimeError` if the parameter size exceeds `UINT16_MAX`.
 
-#### `bool next_param(std::string& out_param)`
-Extracts the next parameter as a string. Returns `true` on success.
+#### `PayloadBuilder& add_param(const std::string& param)`
+Adds a string parameter.
+- **Returns:** A reference to the builder for method chaining.
+- **Throws:** `RuntimeError` if the parameter size exceeds `UINT16_MAX`.
+
+#### `PayloadBuilder& add_param(uint32_t param)`
+Adds a `uint32_t` integer parameter. The integer is converted to network byte order (Big-Endian) and then length-prefixed.
+- **Returns:** A reference to the builder for method chaining.
+
+#### `Payload build()`
+Finalizes the construction and returns the `Payload` object.
+
+---
+
+### `class ObscuraProto::PayloadReader`
+A helper class for sequentially extracting parameters from a received `Payload`.
+
+#### `explicit PayloadReader(const Payload& payload)`
+Constructor. Initializes the reader with the `parameters` field from a `Payload` object.
+
+#### `byte_vector read_param_bytes()`
+Extracts the next parameter as a raw byte array.
+- **Returns:** The parameter as a `byte_vector`.
+- **Throws:** `RuntimeError` if the data is malformed or insufficient for the next parameter.
+
+#### `std::string read_param_string()`
+Extracts the next parameter as a string.
+- **Returns:** The parameter as a `std::string`.
+- **Throws:** `RuntimeError` if the data is malformed or insufficient for the next parameter.
+
+#### `uint32_t read_param_u32()`
+Extracts the next parameter as a `uint32_t` integer. The integer is converted from network byte order (Big-Endian) to host byte order.
+- **Returns:** The parameter as a `uint32_t`.
+- **Throws:** `RuntimeError` if the data is malformed, insufficient, or not exactly 4 bytes long.
+
+#### `bool has_more() const`
+Checks if there are more parameters to read in the payload.
+- **Returns:** `true` if there are unread parameters, `false` otherwise.
 
 ---
 

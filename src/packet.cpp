@@ -1,46 +1,17 @@
 #include "obscuraproto/packet.hpp"
 #include "obscuraproto/errors.hpp"
-#include <arpa/inet.h> // For htons, ntohs, htonll, ntohll if available
-
-// Helper for 64-bit network byte order conversion
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-static uint64_t htonll(uint64_t val) {
-    return (((uint64_t)htonl(val)) << 32) + htonl(val >> 32);
-}
-static uint64_t ntohll(uint64_t val) {
-    return (((uint64_t)ntohl(val)) << 32) + ntohl(val >> 32);
-}
-#else
-#define htonll(x) (x)
-#define ntohll(x) (x)
-#endif
-
+#include <arpa/inet.h> // For htons, ntohs, htonl, ntohl
 
 namespace ObscuraProto {
 
 // --- Payload ---
-
-void Payload::add_param(const byte_vector& param) {
-    if (param.size() > UINT16_MAX) {
-        throw RuntimeError("Parameter size exceeds maximum of 65535 bytes.");
-    }
-    uint16_t len = static_cast<uint16_t>(param.size());
-    uint16_t be_len = htons(len);
-
-    parameters.insert(parameters.end(), reinterpret_cast<uint8_t*>(&be_len), reinterpret_cast<uint8_t*>(&be_len) + sizeof(be_len));
-    parameters.insert(parameters.end(), param.begin(), param.end());
-}
-
-void Payload::add_param(const std::string& param) {
-    add_param(byte_vector(param.begin(), param.end()));
-}
 
 byte_vector Payload::serialize() const {
     byte_vector buffer;
     buffer.reserve(sizeof(op_code) + parameters.size());
 
     uint16_t be_op_code = htons(op_code);
-    buffer.insert(buffer.end(), reinterpret_cast<uint8_t*>(&be_op_code), reinterpret_cast<uint8_t*>(&be_op_code) + sizeof(be_op_code));
+    buffer.insert(buffer.end(), reinterpret_cast<const uint8_t*>(&be_op_code), reinterpret_cast<const uint8_t*>(&be_op_code) + sizeof(be_op_code));
     buffer.insert(buffer.end(), parameters.begin(), parameters.end());
 
     return buffer;
@@ -61,39 +32,81 @@ Payload Payload::deserialize(const byte_vector& data) {
     return payload;
 }
 
+// --- PayloadBuilder ---
 
-// --- Payload::ParamParser ---
+PayloadBuilder::PayloadBuilder(Payload::OpCode op_code) {
+    payload_.op_code = op_code;
+}
 
-Payload::ParamParser::ParamParser(const byte_vector& params) : params_data(params) {}
+PayloadBuilder& PayloadBuilder::add_param(const byte_vector& param) {
+    if (param.size() > UINT16_MAX) {
+        throw RuntimeError("Parameter size exceeds maximum of 65535 bytes.");
+    }
+    uint16_t len = static_cast<uint16_t>(param.size());
+    uint16_t be_len = htons(len);
 
-bool Payload::ParamParser::next_param(byte_vector& out_param) {
-    if (offset + sizeof(uint16_t) > params_data.size()) {
-        return false; // Not enough data for length prefix
+    payload_.parameters.insert(payload_.parameters.end(), reinterpret_cast<uint8_t*>(&be_len), reinterpret_cast<uint8_t*>(&be_len) + sizeof(be_len));
+    payload_.parameters.insert(payload_.parameters.end(), param.begin(), param.end());
+    return *this;
+}
+
+PayloadBuilder& PayloadBuilder::add_param(const std::string& param) {
+    return add_param(byte_vector(param.begin(), param.end()));
+}
+
+PayloadBuilder& PayloadBuilder::add_param(uint32_t param) {
+    uint32_t be_param = htonl(param);
+    byte_vector vec(sizeof(be_param));
+    std::copy(reinterpret_cast<uint8_t*>(&be_param), reinterpret_cast<uint8_t*>(&be_param) + sizeof(be_param), vec.begin());
+    return add_param(vec);
+}
+
+Payload PayloadBuilder::build() {
+    return std::move(payload_);
+}
+
+
+// --- PayloadReader ---
+
+PayloadReader::PayloadReader(const Payload& payload) : params_data_(payload.parameters) {}
+
+bool PayloadReader::has_more() const {
+    return offset_ < params_data_.size();
+}
+
+byte_vector PayloadReader::read_param_bytes() {
+    if (offset_ + sizeof(uint16_t) > params_data_.size()) {
+        throw RuntimeError("Invalid payload data: not enough data for parameter length.");
     }
 
     uint16_t be_len;
-    std::copy(params_data.begin() + offset, params_data.begin() + offset + sizeof(uint16_t), reinterpret_cast<uint8_t*>(&be_len));
+    std::copy(params_data_.begin() + offset_, params_data_.begin() + offset_ + sizeof(uint16_t), reinterpret_cast<uint8_t*>(&be_len));
     uint16_t len = ntohs(be_len);
-    offset += sizeof(uint16_t);
+    offset_ += sizeof(uint16_t);
 
-    if (offset + len > params_data.size()) {
-        // Reset offset to prevent further reads on corrupted data
-        offset = params_data.size();
-        return false; // Not enough data for the parameter itself
+    if (offset_ + len > params_data_.size()) {
+        offset_ = params_data_.size(); // Prevent further reads
+        throw RuntimeError("Invalid payload data: not enough data for parameter content.");
     }
 
-    out_param.assign(params_data.begin() + offset, params_data.begin() + offset + len);
-    offset += len;
-    return true;
+    byte_vector out_param(params_data_.begin() + offset_, params_data_.begin() + offset_ + len);
+    offset_ += len;
+    return out_param;
 }
 
-bool Payload::ParamParser::next_param(std::string& out_param) {
-    byte_vector vec;
-    if (next_param(vec)) {
-        out_param.assign(vec.begin(), vec.end());
-        return true;
+std::string PayloadReader::read_param_string() {
+    byte_vector vec = read_param_bytes();
+    return std::string(vec.begin(), vec.end());
+}
+
+uint32_t PayloadReader::read_param_u32() {
+    byte_vector vec = read_param_bytes();
+    if (vec.size() != sizeof(uint32_t)) {
+        throw RuntimeError("Invalid payload data: expected 4 bytes for u32 parameter.");
     }
-    return false;
+    uint32_t val;
+    std::copy(vec.begin(), vec.end(), reinterpret_cast<uint8_t*>(&val));
+    return ntohl(val);
 }
 
 } // namespace ObscuraProto
