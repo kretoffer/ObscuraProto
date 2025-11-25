@@ -255,14 +255,96 @@ ObscuraProto::Session client_session(ObscuraProto::Role::CLIENT, client_view_of_
     }
     ```
 
+## 6. Высокоуровневый API (WebSocket)
+
+Для большинства сценариев использования рекомендуется применять высокоуровневые обертки для WebSocket, которые автоматически управляют всеми сложностями сетевого взаимодействия, управления соединениями и процессом рукопожатия.
+
+Полный пример можно найти в файле `examples/websocket_example.cpp`.
+
+### Шаг 1: Инициализация и настройка ключей
+
+Этот шаг аналогичен низкоуровневому API. Вам необходимо инициализировать криптографическую библиотеку и настроить ключи сервера.
+
+```cpp
+#include "obscuraproto/crypto.hpp"
+
+// Инициализируем libsodium
+ObscuraProto::Crypto::init();
+
+// На сервере: генерируем долгосрочный ключ
+auto server_long_term_key = ObscuraProto::Crypto::generate_sign_keypair();
+
+// На клиенте: настраиваем публичный ключ сервера
+ObscuraProto::KeyPair client_view_of_server_key;
+client_view_of_server_key.publicKey = server_long_term_key.publicKey;
+```
+
+### Шаг 2: Запуск сервера
+
+Создайте `WsServerWrapper`, установите функцию обратного вызова для обработки входящих данных и запустите его на порту.
+
+```cpp
+#include "obscuraproto/ws_server.hpp"
+
+// Создаем сервер
+ObscuraProto::net::WsServerWrapper server(server_long_term_key);
+
+// Устанавливаем callback для обработки полученных данных и отправки ответа
+server.set_on_payload_callback([&server](auto hdl, ObscuraProto::Payload payload) {
+    std::cout << "[SERVER] Получена полезная нагрузка." << std::endl;
+    
+    // Создаем и отправляем ответ
+    ObscuraProto::Payload response_payload;
+    response_payload.op_code = 0x2002;
+    response_payload.add_param("Привет от сервера!");
+    server.send(hdl, response_payload);
+});
+
+// Запускаем сервер на порту 9002
+server.run(9002);
+```
+
+### Шаг 3: Запуск клиента
+
+Создайте `WsClientWrapper`, установите функции обратного вызова для событий и подключитесь к серверу.
+
+```cpp
+#include "obscuraproto/ws_client.hpp"
+
+// Создаем клиент
+ObscuraProto::net::WsClientWrapper client(client_view_of_server_key);
+
+// Устанавливаем callback на момент, когда защищенный канал будет готов
+client.set_on_ready_callback([&client]() {
+    std::cout << "[CLIENT] Рукопожатие завершено. Отправка сообщения..." << std::endl;
+    ObscuraProto::Payload client_payload;
+    client_payload.op_code = 0x1001;
+    client_payload.add_param("my_username");
+    client.send(client_payload);
+});
+
+// Устанавливаем callback для обработки данных от сервера
+client.set_on_payload_callback([](ObscuraProto::Payload payload) {
+    std::cout << "[CLIENT] Получен ответ от сервера." << std::endl;
+});
+
+// Подключаемся к серверу
+client.connect("ws://localhost:9002");
+
+// ... ждем выполнения работы ...
+
+// Отключаемся по завершении
+client.disconnect();
+server.stop();
+```
+
 ### Зависимости
 
-Эта библиотека требует, чтобы **libsodium** была установлена и слинкована с вашим проектом. Если вы используете CMake, вы можете подключить ее следующим образом:
+Эта библиотека требует **libsodium**, **websocketpp** и **asio**. Если вы используете CMake, они будут автоматически загружены и настроены с помощью `FetchContent`. Вам нужно только слинковать вашу цель с `obscuraproto`.
 
 ```cmake
 target_link_libraries(your_executable_name
     PRIVATE
         obscuraproto
-        sodium
 )
 ```

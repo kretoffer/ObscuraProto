@@ -255,14 +255,96 @@ To send data, you must first construct a `Payload`.
     }
     ```
 
+## 6. High-Level API (WebSocket)
+
+For most use cases, it is recommended to use the high-level WebSocket wrappers, which handle all the complexities of network communication, connection management, and the handshake process automatically.
+
+The full example can be found in `examples/websocket_example.cpp`.
+
+### Step 1: Initialization and Key Setup
+
+This step is the same as in the low-level API. You need to initialize the crypto library and set up the server's keys.
+
+```cpp
+#include "obscuraproto/crypto.hpp"
+
+// Initialize libsodium
+ObscuraProto::Crypto::init();
+
+// On the server: generate a long-term key
+auto server_long_term_key = ObscuraProto::Crypto::generate_sign_keypair();
+
+// On the client: configure the server's public key
+ObscuraProto::KeyPair client_view_of_server_key;
+client_view_of_server_key.publicKey = server_long_term_key.publicKey;
+```
+
+### Step 2: Running the Server
+
+Create a `WsServerWrapper`, set a callback to handle incoming data, and run it on a port.
+
+```cpp
+#include "obscuraproto/ws_server.hpp"
+
+// Create the server
+ObscuraProto::net::WsServerWrapper server(server_long_term_key);
+
+// Set a callback to process received data and send a response
+server.set_on_payload_callback([&server](auto hdl, ObscuraProto::Payload payload) {
+    std::cout << "[SERVER] Received a payload." << std::endl;
+    
+    // Create and send a response
+    ObscuraProto::Payload response_payload;
+    response_payload.op_code = 0x2002;
+    response_payload.add_param("Hello from server!");
+    server.send(hdl, response_payload);
+});
+
+// Run the server on port 9002
+server.run(9002);
+```
+
+### Step 3: Running the Client
+
+Create a `WsClientWrapper`, set callbacks for events, and connect to the server.
+
+```cpp
+#include "obscuraproto/ws_client.hpp"
+
+// Create the client
+ObscuraProto::net::WsClientWrapper client(client_view_of_server_key);
+
+// Set a callback for when the secure channel is ready
+client.set_on_ready_callback([&client]() {
+    std::cout << "[CLIENT] Handshake complete. Sending a message..." << std::endl;
+    ObscuraProto::Payload client_payload;
+    client_payload.op_code = 0x1001;
+    client_payload.add_param("my_username");
+    client.send(client_payload);
+});
+
+// Set a callback to process data from the server
+client.set_on_payload_callback([](ObscuraProto::Payload payload) {
+    std::cout << "[CLIENT] Received a response from the server." << std::endl;
+});
+
+// Connect to the server
+client.connect("ws://localhost:9002");
+
+// ... wait for work to be done ...
+
+// Disconnect when finished
+client.disconnect();
+server.stop();
+```
+
 ### Dependencies
 
-This library requires **libsodium** to be installed and linked to your project. If you are using CMake, you can link it as follows:
+This library requires **libsodium**, **websocketpp**, and **asio**. If you are using CMake, they will be fetched and configured automatically via `FetchContent`. You only need to link against the `obscuraproto` target.
 
 ```cmake
 target_link_libraries(your_executable_name
     PRIVATE
         obscuraproto
-        sodium
 )
 ```

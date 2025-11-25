@@ -167,6 +167,100 @@ Decrypts a packet. Verifies the authentication tag.
 
 ---
 
+## `handshake_messages.hpp`
+
+Defines the structures used during the handshake phase.
+
+### `struct ObscuraProto::ClientHello`
+Represents the initial message sent by the client.
+- `std::vector<Version> supported_versions`: A list of protocol versions the client supports.
+- `PublicKey ephemeral_pk`: The client's ephemeral public key for this session.
+
+#### `byte_vector serialize() const`
+Serializes the `ClientHello` object into a byte vector for network transmission.
+
+#### `static ClientHello deserialize(const byte_vector& data)`
+Deserializes a byte vector back into a `ClientHello` object.
+- **Throws:** `RuntimeError` if the data is corrupted or its size is insufficient.
+
+---
+
+### `struct ObscuraProto::ServerHello`
+Represents the server's response to a `ClientHello`.
+- `Version selected_version`: The protocol version selected by the server.
+- `PublicKey ephemeral_pk`: The server's ephemeral public key for this session.
+- `Signature signature`: The server's signature over its ephemeral public key, for authentication.
+
+#### `byte_vector serialize() const`
+Serializes the `ServerHello` object into a byte vector for network transmission.
+
+#### `static ServerHello deserialize(const byte_vector& data)`
+Deserializes a byte vector back into a `ServerHello` object.
+- **Throws:** `RuntimeError` if the data is corrupted or its size is insufficient.
+
+---
+
+## Network Wrappers (`ws_client.hpp`, `ws_server.hpp`)
+
+These files provide high-level wrappers for running the ObscuraProto protocol over WebSockets. This is the recommended API for most use cases.
+
+### `namespace ObscuraProto::net`
+Contains all network-related classes.
+
+---
+
+### `class ObscuraProto::net::WsServerWrapper`
+A wrapper that runs a WebSocket server to handle multiple secure client connections.
+
+#### `WsServerWrapper(KeyPair server_sign_key)`
+Constructor.
+- `server_sign_key`: The server's long-term signing key pair (public and private).
+
+#### `void run(uint16_t port)`
+Starts the server in a new thread, listening for connections on the specified port.
+
+#### `void stop()`
+Stops the server and disconnects all clients.
+
+#### `void send(WsConnectionHdl hdl, const Payload& payload)`
+Encrypts and sends a `Payload` to a specific client identified by their connection handle `hdl`.
+
+#### `void set_on_payload_callback(OnPayloadCallback callback)`
+Sets a callback function to be invoked when a valid, decrypted `Payload` is received from any client.
+- **Callback signature:** `std::function<void(WsConnectionHdl, Payload)>`
+
+---
+
+### `class ObscuraProto::net::WsClientWrapper`
+A wrapper that runs a WebSocket client to connect to a secure server.
+
+#### `WsClientWrapper(KeyPair server_sign_key)`
+Constructor.
+- `server_sign_key`: A `KeyPair` containing only the server's public signing key.
+
+#### `void connect(const std::string& uri)`
+Connects to the server at the given WebSocket URI (e.g., `ws://localhost:9002`) and starts the client thread. The handshake is initiated automatically upon connection.
+
+#### `void disconnect()`
+Disconnects from the server.
+
+#### `void send(const Payload& payload)`
+Encrypts and sends a `Payload` to the server.
+
+#### `void set_on_ready_callback(OnReadyCallback callback)`
+Sets a callback to be invoked when the handshake with the server is successfully completed.
+- **Callback signature:** `std::function<void()>`
+
+#### `void set_on_payload_callback(OnPayloadCallback callback)`
+Sets a callback to be invoked when a valid, decrypted `Payload` is received from the server.
+- **Callback signature:** `std::function<void(Payload)>`
+
+#### `void set_on_disconnect_callback(OnDisconnectCallback callback)`
+Sets a callback to be invoked when the client is disconnected from the server.
+- **Callback signature:** `std::function<void()>`
+
+---
+
 ## `session.hpp`
 
 The main class for managing session state.
@@ -186,10 +280,10 @@ Session constructor.
     - For a **server**: the full long-term signing key pair (public and private).
     - For a **client**: a pair containing only the server's public signing key.
 
-### Handshake Structures
-
 - `struct ClientHello`: A message from the client to the server. Contains a list of supported versions and the client's ephemeral public key.
 - `struct ServerHello`: A message from the server to the client. Contains the selected version, the server's ephemeral public key, and its signature.
+
+These structures have been moved to `handshake_messages.hpp`.
 
 ### Handshake Methods
 
