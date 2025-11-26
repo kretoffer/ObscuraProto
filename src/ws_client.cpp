@@ -7,6 +7,8 @@
 namespace ObscuraProto {
 namespace net {
 
+constexpr uint16_t RESPONSE_OP_CODE = 0xFFFF;
+
 WsClientWrapper::WsClientWrapper(KeyPair server_sign_key) {
     session_ = std::make_unique<Session>(Role::CLIENT, std::move(server_sign_key));
     client_.init_asio();
@@ -39,17 +41,43 @@ void WsClientWrapper::connect(const std::string& uri) {
 }
 
 void WsClientWrapper::disconnect() {
-    if (!is_connected_) return;
-    
-    try {
-        client_.close(connection_hdl_, websocketpp::close::status::going_away, "Client disconnecting");
-    } catch (const websocketpp::exception& e) {
-        // Ignore exceptions on close
+    // If the client thread doesn't exist, we have nothing to do.
+    if (!client_thread_) {
+        return;
     }
 
-    if (client_thread_ && client_thread_->joinable()) {
+    // Stop the ASIO io_service processing loop.
+    // This will cause client_.run() to return.
+    client_.stop();
+
+    // Fulfill any pending request promises with an exception
+    {
+        std::lock_guard<std::mutex> lock(pending_requests_mutex_);
+        for (auto& pair : pending_requests_) {
+            pair.second.set_exception(std::make_exception_ptr(RuntimeError("Client disconnected")));
+        }
+        pending_requests_.clear();
+    }
+
+    // If the connection is open, request a clean close.
+    if (is_connected_) {
+        try {
+            websocketpp::lib::error_code ec;
+            client_.close(connection_hdl_, websocketpp::close::status::going_away, "", ec);
+            if (ec) {
+                // This can happen if the connection is already closing, which is fine.
+            }
+        } catch (const websocketpp::exception& e) {
+            // Ignore exceptions on close
+        }
+    }
+
+    // Wait for the thread to finish.
+    if (client_thread_->joinable()) {
         client_thread_->join();
     }
+
+    client_thread_.reset();
     is_connected_ = false;
 }
 
@@ -65,6 +93,47 @@ void WsClientWrapper::send(const Payload& payload) {
         std::cerr << "Error sending packet: " << e.what() << std::endl;
     }
 }
+
+std::future<Payload> WsClientWrapper::async_request(const Payload& payload) {
+    if (!is_connected_ || !session_->is_handshake_complete()) {
+        throw LogicError("Session not ready for sending requests.");
+    }
+
+    uint32_t request_id = next_request_id_++;
+    
+    // Manually prepend the request ID to the payload parameters
+    Payload request_payload;
+    request_payload.op_code = payload.op_code;
+
+    PayloadBuilder id_builder(0); // op_code doesn't matter here
+    id_builder.add_param(request_id);
+    byte_vector id_param = id_builder.build().parameters;
+
+    request_payload.parameters.reserve(id_param.size() + payload.parameters.size());
+    request_payload.parameters.insert(request_payload.parameters.end(), id_param.begin(), id_param.end());
+    request_payload.parameters.insert(request_payload.parameters.end(), payload.parameters.begin(), payload.parameters.end());
+
+    auto promise = std::promise<Payload>();
+    auto future = promise.get_future();
+
+    {
+        std::lock_guard<std::mutex> lock(pending_requests_mutex_);
+        pending_requests_[request_id] = std::move(promise);
+    }
+
+    send(request_payload);
+
+    return future;
+}
+
+void WsClientWrapper::send_response(uint32_t request_id, const Payload& payload) {
+    PayloadBuilder response_builder(RESPONSE_OP_CODE);
+    response_builder.add_param(request_id);
+    response_builder.add_param(payload.serialize());
+    
+    send(response_builder.build());
+}
+
 
 void WsClientWrapper::set_on_ready_callback(OnReadyCallback callback) {
     on_ready_callback_ = std::move(callback);
@@ -127,8 +196,29 @@ void WsClientWrapper::on_message(WsConnectionHdl hdl, WsClientMessagePtr msg) {
             byte_vector packet(msg->get_payload().begin(), msg->get_payload().end());
             Payload payload = session_->decrypt_packet(packet);
 
-            if (on_payload_callback_) {
-                on_payload_callback_(std::move(payload));
+            if (payload.op_code == RESPONSE_OP_CODE) {
+                // This is a response to a request
+                PayloadReader reader(payload);
+                uint32_t request_id = reader.read_param_u32();
+                byte_vector response_bytes = reader.read_param_bytes();
+                Payload response_payload = Payload::deserialize(response_bytes);
+
+                {
+                    std::lock_guard<std::mutex> lock(pending_requests_mutex_);
+                    auto it = pending_requests_.find(request_id);
+                    if (it != pending_requests_.end()) {
+                        it->second.set_value(std::move(response_payload));
+                        pending_requests_.erase(it);
+                    } else {
+                        std::cerr << "Received response for unknown or already handled request ID: " << request_id << std::endl;
+                    }
+                }
+
+            } else {
+                // This is a regular push message
+                if (on_payload_callback_) {
+                    on_payload_callback_(std::move(payload));
+                }
             }
         }
     } catch (const std::exception& e) {

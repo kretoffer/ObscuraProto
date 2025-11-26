@@ -16,4 +16,10 @@ target_link_libraries(websocket_example
         obscuraproto
 )
 
+# Add the request-response example
+add_executable(request_response_example request_response_example.cpp)
 
+target_link_libraries(request_response_example
+    PRIVATE
+        obscuraproto
+)
