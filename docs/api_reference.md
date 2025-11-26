@@ -257,8 +257,21 @@ Stops the server and disconnects all clients.
 #### `void send(WsConnectionHdl hdl, const Payload& payload)`
 Encrypts and sends a `Payload` to a specific client identified by their connection handle `hdl`.
 
+#### `void send_response(WsConnectionHdl hdl, uint32_t request_id, const Payload& payload)`
+Sends a response to a client for a previously received request. The `payload` provided here is the application-level response. The library handles wrapping it with the internal `RESPONSE_OP_CODE` (`0xFFFF`) and the `request_id`.
+- `hdl`: The connection handle of the client to send the response to.
+- `request_id`: The unique ID of the request this response is for, extracted from the incoming request payload.
+- `payload`: The application-level `Payload` containing the actual response data.
+
+#### `std::future<Payload> async_request(WsConnectionHdl hdl, const Payload& payload)`
+Sends a `Payload` as a request to a specific client and returns a `std::future` that will be fulfilled with the client's response.
+- `hdl`: The connection handle of the client to send the request to.
+- `payload`: The application-level `Payload` to send as a request.
+- **Returns:** A `std::future<Payload>` that will eventually hold the client's application-level response.
+- **Throws:** `LogicError` if the session is not ready.
+
 #### `void set_on_payload_callback(OnPayloadCallback callback)`
-Sets a callback function to be invoked when a valid, decrypted `Payload` is received from any client.
+Sets a callback function to be invoked when a valid, decrypted `Payload` is received from any client. This callback handles both push messages and requests that require a response.
 - **Callback signature:** `std::function<void(WsConnectionHdl, Payload)>`
 
 ---
@@ -279,12 +292,23 @@ Disconnects from the server.
 #### `void send(const Payload& payload)`
 Encrypts and sends a `Payload` to the server.
 
+#### `std::future<Payload> async_request(const Payload& payload)`
+Sends a `Payload` as a request to the server and returns a `std::future` that will be fulfilled with the server's response.
+- `payload`: The application-level `Payload` to send as a request.
+- **Returns:** A `std::future<Payload>` that will eventually hold the server's application-level response.
+- **Throws:** `LogicError` if the session is not ready.
+
+#### `void send_response(uint32_t request_id, const Payload& payload)`
+Sends a response to the server for a previously received request.
+- `request_id`: The unique ID of the request this response is for, extracted from the incoming request payload.
+- `payload`: The application-level `Payload` containing the actual response data.
+
 #### `void set_on_ready_callback(OnReadyCallback callback)`
 Sets a callback to be invoked when the handshake with the server is successfully completed.
 - **Callback signature:** `std::function<void()>`
 
 #### `void set_on_payload_callback(OnPayloadCallback callback)`
-Sets a callback to be invoked when a valid, decrypted `Payload` is received from the server.
+Sets a callback to be invoked when a valid, decrypted `Payload` is received from the server. This callback handles both push messages and requests from the server that require a response.
 - **Callback signature:** `std::function<void(Payload)>`
 
 #### `void set_on_disconnect_callback(OnDisconnectCallback callback)`
@@ -347,3 +371,10 @@ Decrypts an `EncryptedPacket`. Checks the message counter for replay attack prot
 #### `bool is_handshake_complete() const`
 Checks if the handshake has been successfully completed.
 - **Returns:** `true` if the session is ready for data exchange.
+
+---
+
+## Protocol Constants
+
+### `constexpr uint16_t RESPONSE_OP_CODE = 0xFFFF`
+An internal operation code used by the request-response mechanism to identify a response message. This code is handled internally by the `WsClientWrapper` and `WsServerWrapper` and is not typically exposed to the application logic.

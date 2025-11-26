@@ -263,6 +263,68 @@ For most use cases, it is recommended to use the high-level WebSocket wrappers, 
 
 The full example can be found in `examples/websocket_example.cpp`.
 
+### 6.1. Bidirectional Request-Response Pattern
+
+To simplify common request-response interactions, the high-level API provides dedicated methods for a **fully bidirectional** flow. Both the client and the server can initiate requests and respond to them. This pattern uses a special internal operation code (`0xFFFF`) for responses and prepends a unique request ID to the payload parameters.
+
+#### Initiating a Request
+
+Both `WsClientWrapper` and `WsServerWrapper` have an `async_request` method. It sends a request and returns a `std::future` that will be fulfilled with the response.
+
+```cpp
+// Client-side example
+std::future<ObscuraProto::Payload> response_future = client.async_request(request_payload);
+
+// Server-side example (requires a connection handle `hdl`)
+std::future<ObscuraProto::Payload> response_future = server.async_request(hdl, request_payload);
+
+// Common logic to get the response
+if (response_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready) {
+    ObscuraProto::Payload response = response_future.get();
+    // Process the application-level response payload.
+    // The 0xFFFF wrapper is automatically handled by the library.
+}
+```
+
+#### Handling a Request and Sending a Response
+
+Requests from the other party are received in the standard `on_payload_callback`. Your application logic should identify the message as a request, parse its parameters (including the request ID), and use the corresponding `send_response` method.
+
+-   **Request Payload Structure**: The first parameter is always the `uint32_t` request ID, followed by your application-specific parameters.
+-   **Handling Logic**:
+    1.  In `on_payload_callback`, check the `op_code` to identify a request.
+    2.  Use `PayloadReader` to read the `request_id` first, then other parameters.
+    3.  Create your application-level response `Payload`.
+    4.  Call `send_response(request_id, response_payload)` on the client or `send_response(hdl, request_id, response_payload)` on the server.
+
+```cpp
+// Server-side example of handling a client's request
+server.set_on_payload_callback([&server](auto hdl, ObscuraProto::Payload payload) {
+    if (payload.op_code == 0x3001) { // A request from a client
+        ObscuraProto::PayloadReader reader(payload);
+        uint32_t request_id = reader.read_param_u32(); // 1. Read ID
+        // ... read other params ...
+        
+        ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x3002).build();
+        server.send_response(hdl, request_id, response_payload); // 2. Send response
+    }
+});
+
+// Client-side example of handling a server's request
+client.set_on_payload_callback([&client](ObscuraProto::Payload payload) {
+    if (payload.op_code == 0x4001) { // A request from the server
+        ObscuraProto::PayloadReader reader(payload);
+        uint32_t request_id = reader.read_param_u32(); // 1. Read ID
+        // ... read other params ...
+
+        ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x4002).build();
+        client.send_response(request_id, response_payload); // 2. Send response
+    }
+});
+```
+
+A complete example demonstrating this bidirectional pattern can be found in `examples/request_response_example.cpp`.
+
 ### Step 1: Initialization and Key Setup
 
 This step is the same as in the low-level API. You need to initialize the crypto library and set up the server's keys.

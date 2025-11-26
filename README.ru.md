@@ -263,6 +263,68 @@ ObscuraProto::Session client_session(ObscuraProto::Role::CLIENT, client_view_of_
 
 Полный пример можно найти в файле `examples/websocket_example.cpp`.
 
+### 6.1. Двунаправленный паттерн Запрос-Ответ
+
+Для упрощения типовых взаимодействий "запрос-ответ" высокоуровневый API предоставляет специализированные методы для **полностью двунаправленного** обмена. И клиент, и сервер могут инициировать запросы и отвечать на них. Этот паттерн использует специальный внутренний код операции (`0xFFFF`) для ответов и добавляет уникальный ID запроса в начало параметров полезной нагрузки.
+
+#### Инициация запроса
+
+И `WsClientWrapper`, и `WsServerWrapper` имеют метод `async_request`. Он отправляет запрос и возвращает `std::future`, который будет выполнен с ответом.
+
+```cpp
+// Пример на стороне клиента
+std::future<ObscuraProto::Payload> response_future = client.async_request(request_payload);
+
+// Пример на стороне сервера (требует дескриптор соединения `hdl`)
+std::future<ObscuraProto::Payload> response_future = server.async_request(hdl, request_payload);
+
+// Общая логика для получения ответа
+if (response_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready) {
+    ObscuraProto::Payload response = response_future.get();
+    // Обрабатываем полезную нагрузку ответа на уровне приложения.
+    // Обертка 0xFFFF автоматически обрабатывается библиотекой.
+}
+```
+
+#### Обработка запроса и отправка ответа
+
+Запросы от другой стороны приходят в стандартный колбэк `on_payload_callback`. Ваша логика приложения должна определить, что сообщение является запросом, разобрать его параметры (включая ID запроса) и использовать соответствующий метод `send_response`.
+
+-   **Структура полезной нагрузки запроса**: Первым параметром всегда идет `uint32_t` ID запроса, за которым следуют ваши специфичные для приложения параметры.
+-   **Логика обработки**:
+    1.  В `on_payload_callback` проверьте `op_code`, чтобы определить, что это запрос.
+    2.  Используйте `PayloadReader`, чтобы сначала прочитать `request_id`, а затем остальные параметры.
+    3.  Создайте `Payload` ответа на уровне вашего приложения.
+    4.  Вызовите `send_response(request_id, response_payload)` на клиенте или `send_response(hdl, request_id, response_payload)` на сервере.
+
+```cpp
+// Пример обработки запроса от клиента на сервере
+server.set_on_payload_callback([&server](auto hdl, ObscuraProto::Payload payload) {
+    if (payload.op_code == 0x3001) { // Запрос от клиента
+        ObscuraProto::PayloadReader reader(payload);
+        uint32_t request_id = reader.read_param_u32(); // 1. Читаем ID
+        // ... читаем другие параметры ...
+        
+        ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x3002).build();
+        server.send_response(hdl, request_id, response_payload); // 2. Отправляем ответ
+    }
+});
+
+// Пример обработки запроса от сервера на клиенте
+client.set_on_payload_callback([&client](ObscuraProto::Payload payload) {
+    if (payload.op_code == 0x4001) { // Запрос от сервера
+        ObscuraProto::PayloadReader reader(payload);
+        uint32_t request_id = reader.read_param_u32(); // 1. Читаем ID
+        // ... читаем другие параметры ...
+
+        ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x4002).build();
+        client.send_response(request_id, response_payload); // 2. Отправляем ответ
+    }
+});
+```
+
+Полный пример, демонстрирующий этот двунаправленный паттерн, можно найти в файле `examples/request_response_example.cpp`.
+
 ### Шаг 1: Инициализация и настройка ключей
 
 Этот шаг аналогичен низкоуровневому API. Вам необходимо инициализировать криптографическую библиотеку и настроить ключи сервера.
