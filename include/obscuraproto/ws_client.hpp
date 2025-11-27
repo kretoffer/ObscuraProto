@@ -41,6 +41,23 @@ public:
     void send_response(uint32_t request_id, const Payload& payload);
 
     void set_on_ready_callback(OnReadyCallback callback);
+    
+    /**
+     * @brief Registers a handler for a specific operation code.
+     * @param op_code The operation code to handle.
+     * @param callback The function to call when a payload with this op_code is received.
+     */
+    void register_op_handler(Payload::OpCode op_code, OnPayloadCallback callback);
+
+    /**
+     * @brief Sets a default handler for any operation code that doesn't have a specific handler registered.
+     * @param callback The function to call.
+     */
+    void set_default_payload_handler(OnPayloadCallback callback);
+
+    /**
+     * @brief DEPRECATED: Sets the default payload handler. Use set_default_payload_handler for clarity.
+     */
     void set_on_payload_callback(OnPayloadCallback callback);
     void set_on_disconnect_callback(OnDisconnectCallback callback);
 
@@ -58,8 +75,12 @@ private:
     bool is_connected_ = false;
 
     OnReadyCallback on_ready_callback_;
-    OnPayloadCallback on_payload_callback_;
     OnDisconnectCallback on_disconnect_callback_;
+
+    // For payload handling
+    std::mutex op_handlers_mutex_;
+    std::map<Payload::OpCode, OnPayloadCallback> op_code_handlers_;
+    OnPayloadCallback default_payload_handler_;
 
     // For request-response mechanism
     std::mutex pending_requests_mutex_;

@@ -116,8 +116,19 @@ std::future<Payload> WsServerWrapper::async_request(WsConnectionHdl hdl, const P
     return future;
 }
 
+void WsServerWrapper::register_op_handler(Payload::OpCode op_code, OnPayloadCallback callback) {
+    std::lock_guard<std::mutex> lock(op_handlers_mutex_);
+    op_code_handlers_[op_code] = std::move(callback);
+}
+
+void WsServerWrapper::set_default_payload_handler(OnPayloadCallback callback) {
+    std::lock_guard<std::mutex> lock(op_handlers_mutex_);
+    default_payload_handler_ = std::move(callback);
+}
+
+// legacy
 void WsServerWrapper::set_on_payload_callback(OnPayloadCallback callback) {
-    on_payload_callback_ = std::move(callback);
+    set_default_payload_handler(std::move(callback));
 }
 
 void WsServerWrapper::on_open(WsConnectionHdl hdl) {
@@ -184,8 +195,25 @@ void WsServerWrapper::on_message(WsConnectionHdl hdl, WsMessagePtr msg) {
                 }
             } else {
                 // This is a regular message or a request from the client
-                if (on_payload_callback_) {
-                    on_payload_callback_(hdl, std::move(payload));
+                bool handled = false;
+                OnPayloadCallback handler;
+                OnPayloadCallback default_handler;
+
+                {
+                    std::lock_guard<std::mutex> lock(op_handlers_mutex_);
+                    auto it = op_code_handlers_.find(payload.op_code);
+                    if (it != op_code_handlers_.end()) {
+                        handler = it->second;
+                        handled = true;
+                    } else {
+                        default_handler = default_payload_handler_;
+                    }
+                }
+
+                if (handled) {
+                    handler(hdl, std::move(payload));
+                } else if (default_handler) {
+                    default_handler(hdl, std::move(payload));
                 }
             }
 

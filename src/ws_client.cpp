@@ -139,8 +139,19 @@ void WsClientWrapper::set_on_ready_callback(OnReadyCallback callback) {
     on_ready_callback_ = std::move(callback);
 }
 
+void WsClientWrapper::register_op_handler(Payload::OpCode op_code, OnPayloadCallback callback) {
+    std::lock_guard<std::mutex> lock(op_handlers_mutex_);
+    op_code_handlers_[op_code] = std::move(callback);
+}
+
+void WsClientWrapper::set_default_payload_handler(OnPayloadCallback callback) {
+    std::lock_guard<std::mutex> lock(op_handlers_mutex_);
+    default_payload_handler_ = std::move(callback);
+}
+
+// legacy
 void WsClientWrapper::set_on_payload_callback(OnPayloadCallback callback) {
-    on_payload_callback_ = std::move(callback);
+    set_default_payload_handler(std::move(callback));
 }
 
 void WsClientWrapper::set_on_disconnect_callback(OnDisconnectCallback callback) {
@@ -216,8 +227,24 @@ void WsClientWrapper::on_message(WsConnectionHdl hdl, WsClientMessagePtr msg) {
 
             } else {
                 // This is a regular push message
-                if (on_payload_callback_) {
-                    on_payload_callback_(std::move(payload));
+                bool handled = false;
+                OnPayloadCallback handler;
+                OnPayloadCallback default_handler;
+                {
+                    std::lock_guard<std::mutex> lock(op_handlers_mutex_);
+                    auto it = op_code_handlers_.find(payload.op_code);
+                    if (it != op_code_handlers_.end()) {
+                        handler = it->second;
+                        handled = true;
+                    } else {
+                        default_handler = default_payload_handler_;
+                    }
+                }
+
+                if (handled) {
+                    handler(std::move(payload));
+                } else if (default_handler) {
+                    default_handler(std::move(payload));
                 }
             }
         }

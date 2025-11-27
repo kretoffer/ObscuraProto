@@ -23,3 +23,11 @@ target_link_libraries(request_response_example
     PRIVATE
         obscuraproto
 )
+
+# Add the opcode_callbacks example
+add_executable(opcode_callbacks_example opcode_callbacks_example.cpp)
+
+target_link_libraries(opcode_callbacks_example
+    PRIVATE
+        obscuraproto
+)
