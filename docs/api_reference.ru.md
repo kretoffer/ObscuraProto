@@ -270,9 +270,17 @@
 - **Возвращает:** `std::future<Payload>`, который в конечном итоге будет содержать ответ клиента на уровне приложения.
 - **Выбрасывает:** `LogicError`, если сессия не готова.
 
-#### `void set_on_payload_callback(OnPayloadCallback callback)`
-Устанавливает функцию обратного вызова, которая будет вызвана при получении валидного, расшифрованного `Payload` от любого клиента. Этот колбэк обрабатывает как push-сообщения, так и запросы, требующие ответа.
+#### `void register_op_handler(Payload::OpCode op_code, OnPayloadCallback callback)`
+Регистрирует обработчик для конкретного кода операции. Когда будет получена полезная нагрузка с соответствующим `op_code`, будет вызван этот колбэк.
+- `op_code`: Код операции для обработки.
+- `callback`: Функция для вызова.
+
+#### `void set_default_payload_handler(OnPayloadCallback callback)`
+Устанавливает функцию обратного вызова, которая будет вызвана при получении `Payload` от любого клиента, если для его `op_code` не зарегистрирован специальный обработчик. Работает как "catch-all" обработчик.
 - **Сигнатура:** `std::function<void(WsConnectionHdl, Payload)>`
+
+#### `void set_on_payload_callback(OnPayloadCallback callback)`
+**Устарело.** Этот метод теперь вызывает `set_default_payload_handler`. Используйте `set_default_payload_handler` для ясности или `register_op_handler` для конкретных кодов операций.
 
 ---
 
@@ -307,9 +315,17 @@
 Устанавливает функцию обратного вызова, которая будет вызвана после успешного завершения рукопожатия с сервером.
 - **Сигнатура:** `std::function<void()>`
 
-#### `void set_on_payload_callback(OnPayloadCallback callback)`
-Устанавливает функцию обратного вызова, которая будет вызвана при получении валидного, расшифрованного `Payload` от сервера. Этот колбэк обрабатывает как push-сообщения, так и запросы от сервера, требующие ответа.
+#### `void register_op_handler(Payload::OpCode op_code, OnPayloadCallback callback)`
+Регистрирует обработчик для конкретного кода операции. Когда от сервера будет получена полезная нагрузка с соответствующим `op_code`, будет вызван этот колбэк.
+- `op_code`: Код операции для обработки.
+- `callback`: Функция для вызова.
+
+#### `void set_default_payload_handler(OnPayloadCallback callback)`
+Устанавливает функцию обратного вызова, которая будет вызвана при получении `Payload` от сервера, если для его `op_code` не зарегистрирован специальный обработчик.
 - **Сигнатура:** `std::function<void(Payload)>`
+
+#### `void set_on_payload_callback(OnPayloadCallback callback)`
+**Устарело.** Этот метод теперь вызывает `set_default_payload_handler`. Используйте `set_default_payload_handler` для ясности или `register_op_handler` для конкретных кодов операций.
 
 #### `void set_on_disconnect_callback(OnDisconnectCallback callback)`
 Устанавливает функцию обратного вызова, которая будет вызвана при отключении клиента от сервера.

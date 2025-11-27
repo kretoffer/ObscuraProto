@@ -353,9 +353,9 @@ Create a `WsServerWrapper`, set a callback to handle incoming data, and run it o
 // Create the server
 ObscuraProto::net::WsServerWrapper server(server_long_term_key);
 
-// Set a callback to process received data and send a response
-server.set_on_payload_callback([&server](auto hdl, ObscuraProto::Payload payload) {
-    std::cout << "[SERVER] Received a payload." << std::endl;
+// Register a handler for a specific operation code (e.g., 0x1001)
+server.register_op_handler(0x1001, [&server](auto hdl, ObscuraProto::Payload payload) {
+    std::cout << "[SERVER] Received a payload with op_code 0x1001." << std::endl;
     
     // Example of reading mixed parameters
     ObscuraProto::PayloadReader reader(payload);
@@ -396,8 +396,8 @@ client.set_on_ready_callback([&client]() {
     client.send(client_payload);
 });
 
-// Set a callback to process data from the server
-client.set_on_payload_callback([](ObscuraProto::Payload payload) {
+// Register a handler for the response from the server (e.g., op_code 0x2002)
+client.register_op_handler(0x2002, [](ObscuraProto::Payload payload) {
     std::cout << "[CLIENT] Received a response from the server." << std::endl;
     ObscuraProto::PayloadReader reader(payload);
     std::string message = reader.read_param_string();

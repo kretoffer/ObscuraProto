@@ -270,9 +270,17 @@ Sends a `Payload` as a request to a specific client and returns a `std::future` 
 - **Returns:** A `std::future<Payload>` that will eventually hold the client's application-level response.
 - **Throws:** `LogicError` if the session is not ready.
 
-#### `void set_on_payload_callback(OnPayloadCallback callback)`
-Sets a callback function to be invoked when a valid, decrypted `Payload` is received from any client. This callback handles both push messages and requests that require a response.
+#### `void register_op_handler(Payload::OpCode op_code, OnPayloadCallback callback)`
+Registers a handler for a specific operation code. When a payload with a matching `op_code` is received, this specific callback will be invoked.
+- `op_code`: The operation code to handle.
+- `callback`: The function to call.
+
+#### `void set_default_payload_handler(OnPayloadCallback callback)`
+Sets a callback function to be invoked when a `Payload` is received from any client and there is no specific handler registered for its `op_code`. This acts as a catch-all handler.
 - **Callback signature:** `std::function<void(WsConnectionHdl, Payload)>`
+
+#### `void set_on_payload_callback(OnPayloadCallback callback)`
+**Deprecated.** This method now calls `set_default_payload_handler`. Use `set_default_payload_handler` for clarity or `register_op_handler` for specific op-codes.
 
 ---
 
@@ -307,9 +315,17 @@ Sends a response to the server for a previously received request.
 Sets a callback to be invoked when the handshake with the server is successfully completed.
 - **Callback signature:** `std::function<void()>`
 
-#### `void set_on_payload_callback(OnPayloadCallback callback)`
-Sets a callback to be invoked when a valid, decrypted `Payload` is received from the server. This callback handles both push messages and requests from the server that require a response.
+#### `void register_op_handler(Payload::OpCode op_code, OnPayloadCallback callback)`
+Registers a handler for a specific operation code. When a payload with a matching `op_code` is received from the server, this callback will be invoked.
+- `op_code`: The operation code to handle.
+- `callback`: The function to call.
+
+#### `void set_default_payload_handler(OnPayloadCallback callback)`
+Sets a callback function to be invoked when a `Payload` is received from the server and there is no specific handler registered for its `op_code`.
 - **Callback signature:** `std::function<void(Payload)>`
+
+#### `void set_on_payload_callback(OnPayloadCallback callback)`
+**Deprecated.** This method now calls `set_default_payload_handler`. Use `set_default_payload_handler` for clarity or `register_op_handler` for specific op-codes.
 
 #### `void set_on_disconnect_callback(OnDisconnectCallback callback)`
 Sets a callback to be invoked when the client is disconnected from the server.

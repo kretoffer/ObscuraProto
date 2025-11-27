@@ -353,9 +353,9 @@ client_view_of_server_key.publicKey = server_long_term_key.publicKey;
 // Создаем сервер
 ObscuraProto::net::WsServerWrapper server(server_long_term_key);
 
-// Устанавливаем callback для обработки полученных данных и отправки ответа
-server.set_on_payload_callback([&server](auto hdl, ObscuraProto::Payload payload) {
-    std::cout << "[SERVER] Получена полезная нагрузка." << std::endl;
+// Регистрируем обработчик для конкретного кода операции (например, 0x1001)
+server.register_op_handler(0x1001, [&server](auto hdl, ObscuraProto::Payload payload) {
+    std::cout << "[SERVER] Получена полезная нагрузка с op_code 0x1001." << std::endl;
     
     // Пример чтения смешанных параметров
     ObscuraProto::PayloadReader reader(payload);
@@ -396,8 +396,8 @@ client.set_on_ready_callback([&client]() {
     client.send(client_payload);
 });
 
-// Устанавливаем callback для обработки данных от сервера
-client.set_on_payload_callback([](ObscuraProto::Payload payload) {
+// Регистрируем обработчик для ответа от сервера (например, op_code 0x2002)
+client.register_op_handler(0x2002, [](ObscuraProto::Payload payload) {
     std::cout << "[CLIENT] Получен ответ от сервера." << std::endl;
     ObscuraProto::PayloadReader reader(payload);
     std::string message = reader.read_param_string();
