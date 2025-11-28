@@ -62,9 +62,11 @@ int main() {
 
     // 6. Data Transfer: Client -> Server
     std::cout << "\n--- Testing Data Transfer (Client to Server) ---" << std::endl;
+    uint64_t timestamp = 1678886400000;
     ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
         .add_param("my_username")
         .add_param("my_very_secret_password")
+        .add_param(timestamp)
         .build();
 
     std::cout << "[CLIENT] Serialized payload to send:" << std::endl;
@@ -84,14 +86,17 @@ int main() {
         assert(decrypted_payload.op_code == client_payload.op_code);
         
         ObscuraProto::PayloadReader reader(decrypted_payload);
-        std::string username = reader.read_param_string();
-        std::string password = reader.read_param_string();
+        std::string username = reader.read_param<std::string>();
+        std::string password = reader.read_param<std::string>();
+        uint64_t received_timestamp = reader.read_param<uint64_t>();
 
         std::cout << "  OpCode: 0x" << std::hex << decrypted_payload.op_code << std::dec << std::endl;
         std::cout << "  Username: " << username << std::endl;
         std::cout << "  Password: " << password << std::endl;
+        std::cout << "  Timestamp: " << received_timestamp << std::endl;
         assert(username == "my_username");
         assert(password == "my_very_secret_password");
+        assert(received_timestamp == timestamp);
 
     } catch (const std::exception& e) {
         std::cerr << "[SERVER] Decryption failed: " << e.what() << std::endl;

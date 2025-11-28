@@ -54,12 +54,80 @@ PayloadBuilder& PayloadBuilder::add_param(const std::string& param) {
     return add_param(byte_vector(param.begin(), param.end()));
 }
 
+PayloadBuilder& PayloadBuilder::add_param(const char* param) {
+    return add_param(std::string(param));
+}
+
+PayloadBuilder& PayloadBuilder::add_param(bool param) {
+    return add_param(static_cast<uint8_t>(param ? 1 : 0));
+}
+
+PayloadBuilder& PayloadBuilder::add_param(int8_t param) {
+    byte_vector vec(sizeof(param));
+    vec[0] = param;
+    return add_param(vec);
+}
+
+PayloadBuilder& PayloadBuilder::add_param(uint8_t param) {
+    byte_vector vec(sizeof(param));
+    vec[0] = param;
+    return add_param(vec);
+}
+
+PayloadBuilder& PayloadBuilder::add_param(int16_t param) {
+    int16_t be_param = htons(param);
+    byte_vector vec(sizeof(be_param));
+    std::copy(reinterpret_cast<uint8_t*>(&be_param), reinterpret_cast<uint8_t*>(&be_param) + sizeof(be_param), vec.begin());
+    return add_param(vec);
+}
+
+PayloadBuilder& PayloadBuilder::add_param(uint16_t param) {
+    uint16_t be_param = htons(param);
+    byte_vector vec(sizeof(be_param));
+    std::copy(reinterpret_cast<uint8_t*>(&be_param), reinterpret_cast<uint8_t*>(&be_param) + sizeof(be_param), vec.begin());
+    return add_param(vec);
+}
+
+PayloadBuilder& PayloadBuilder::add_param(int32_t param) {
+    int32_t be_param = htonl(param);
+    byte_vector vec(sizeof(be_param));
+    std::copy(reinterpret_cast<uint8_t*>(&be_param), reinterpret_cast<uint8_t*>(&be_param) + sizeof(be_param), vec.begin());
+    return add_param(vec);
+}
+
 PayloadBuilder& PayloadBuilder::add_param(uint32_t param) {
     uint32_t be_param = htonl(param);
     byte_vector vec(sizeof(be_param));
     std::copy(reinterpret_cast<uint8_t*>(&be_param), reinterpret_cast<uint8_t*>(&be_param) + sizeof(be_param), vec.begin());
     return add_param(vec);
 }
+
+PayloadBuilder& PayloadBuilder::add_param(int64_t param) {
+    int64_t be_param = detail::htonll_local(param);
+    byte_vector vec(sizeof(be_param));
+    std::copy(reinterpret_cast<uint8_t*>(&be_param), reinterpret_cast<uint8_t*>(&be_param) + sizeof(be_param), vec.begin());
+    return add_param(vec);
+}
+
+PayloadBuilder& PayloadBuilder::add_param(uint64_t param) {
+    uint64_t be_param = detail::htonll_local(param);
+    byte_vector vec(sizeof(be_param));
+    std::copy(reinterpret_cast<uint8_t*>(&be_param), reinterpret_cast<uint8_t*>(&be_param) + sizeof(be_param), vec.begin());
+    return add_param(vec);
+}
+
+PayloadBuilder& PayloadBuilder::add_param(float param) {
+    byte_vector vec(sizeof(param));
+    std::copy(reinterpret_cast<uint8_t*>(&param), reinterpret_cast<uint8_t*>(&param) + sizeof(param), vec.begin());
+    return add_param(vec);
+}
+
+PayloadBuilder& PayloadBuilder::add_param(double param) {
+    byte_vector vec(sizeof(param));
+    std::copy(reinterpret_cast<uint8_t*>(&param), reinterpret_cast<uint8_t*>(&param) + sizeof(param), vec.begin());
+    return add_param(vec);
+}
+
 
 Payload PayloadBuilder::build() {
     return std::move(payload_);
@@ -92,21 +160,6 @@ byte_vector PayloadReader::read_param_bytes() {
     byte_vector out_param(params_data_.begin() + offset_, params_data_.begin() + offset_ + len);
     offset_ += len;
     return out_param;
-}
-
-std::string PayloadReader::read_param_string() {
-    byte_vector vec = read_param_bytes();
-    return std::string(vec.begin(), vec.end());
-}
-
-uint32_t PayloadReader::read_param_u32() {
-    byte_vector vec = read_param_bytes();
-    if (vec.size() != sizeof(uint32_t)) {
-        throw RuntimeError("Invalid payload data: expected 4 bytes for u32 parameter.");
-    }
-    uint32_t val;
-    std::copy(vec.begin(), vec.end(), reinterpret_cast<uint8_t*>(&val));
-    return ntohl(val);
 }
 
 } // namespace ObscuraProto

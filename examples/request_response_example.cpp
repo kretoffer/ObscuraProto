@@ -43,7 +43,7 @@ int main() {
         [&](auto hdl, ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
             
             std::cout << "[SERVER] Received client's echo request." << std::endl;
-            std::string message = reader.read_param_string();
+            std::string message = reader.read_param<std::string>();
 
             // To avoid blocking the network thread, run the server-initiated request in a new thread.
             std::thread([&, hdl, done_promise = &server_request_done_promise]() {
@@ -57,7 +57,7 @@ int main() {
                         auto client_response = server_future.get();
                         if (client_response.op_code == OP_S2C_TIME_RESPONSE) {
                             ObscuraProto::PayloadReader reader(client_response);
-                            std::cout << "[SERVER] Received response from client: " << reader.read_param_string() << std::endl;
+                            std::cout << "[SERVER] Received response from client: " << reader.read_param<std::string>() << std::endl;
                         }
                     } catch (const std::exception& e) {
                         std::cerr << "[SERVER] Exception getting client response: " << e.what() << std::endl;
@@ -133,7 +133,7 @@ int main() {
             std::cout << "[CLIENT] Received response from server!" << std::endl;
             if (response.op_code == OP_C2S_ECHO_RESPONSE) {
                 ObscuraProto::PayloadReader reader(response);
-                std::cout << "[CLIENT]   Server response: \"" << reader.read_param_string() << "\"" << std::endl;
+                std::cout << "[CLIENT]   Server response: \"" << reader.read_param<std::string>() << "\"" << std::endl;
             }
         } catch (const std::exception& e) {
             std::cerr << "[CLIENT] Exception while getting response: " << e.what() << std::endl;

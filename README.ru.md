@@ -228,7 +228,7 @@ ObscuraProto::Session client_session(ObscuraProto::Role::CLIENT, client_view_of_
     ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
         .add_param("my_username")
         .add_param("my_secret_password")
-        .add_param((uint32_t)1) // Пример добавления целочисленного параметра
+        .add_param(1) // Пример добавления целочисленного параметра
         .build();
 
     // Шифруем полезную нагрузку, чтобы получить пакет, готовый к передаче
@@ -244,9 +244,9 @@ ObscuraProto::Session client_session(ObscuraProto::Role::CLIENT, client_view_of_
 
         // Разбираем параметры
         ObscuraProto::PayloadReader reader(decrypted_payload);
-        std::string username = reader.read_param_string();
-        std::string password = reader.read_param_string();
-        uint32_t login_attempts = reader.read_param_u32(); // Читаем целочисленный параметр
+        std::string username = reader.read_param<std::string>();
+        std::string password = reader.read_param<std::string>();
+        int login_attempts = reader.read_param<int>(); // Читаем целочисленный параметр
         
         // Используем данные...
         std::cout << "Получено: User=" << username << ", Pass=" << password << ", Attempts=" << login_attempts << std::endl;
@@ -297,7 +297,7 @@ if (response_future.wait_for(std::chrono::seconds(5)) == std::future_status::rea
 server.register_request_handler(0x3001, 
     [](auto hdl, ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
         // 1. Читаем параметры напрямую, без необходимости обрабатывать request_id
-        std::string client_message = reader.read_param_string();
+        std::string client_message = reader.read_param<std::string>();
         
         // 2. Просто возвращаем полезную нагрузку ответа
         return ObscuraProto::PayloadBuilder(0x3002)
@@ -355,9 +355,9 @@ server.set_default_payload_handler([&server](auto hdl, ObscuraProto::Payload pay
     
     // Пример чтения смешанных параметров
     ObscuraProto::PayloadReader reader(payload);
-    std::string username = reader.read_param_string();
-    std::string password = reader.read_param_string();
-    uint32_t login_attempts = reader.read_param_u32();
+    std::string username = reader.read_param<std::string>();
+    std::string password = reader.read_param<std::string>();
+    uint32_t login_attempts = reader.read_param<uint32_t>();
     std::cout << "[SERVER] Расшифровано: User=" << username << ", Pass=" << password << ", Attempts=" << login_attempts << std::endl;
 
     // Создаем и отправляем ответ (как простое push-сообщение)
@@ -387,7 +387,7 @@ client.set_on_ready_callback([&client]() {
     ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
         .add_param("my_username")
         .add_param("my_password")
-        .add_param((uint32_t)1)
+        .add_param(1)
         .build();
     client.send(client_payload);
 });
@@ -396,7 +396,7 @@ client.set_on_ready_callback([&client]() {
 client.register_op_handler(0x2002, [](ObscuraProto::Payload payload) {
     std::cout << "[CLIENT] Получен ответ от сервера." << std::endl;
     ObscuraProto::PayloadReader reader(payload);
-    std::string message = reader.read_param_string();
+    std::string message = reader.read_param<std::string>();
     std::cout << "[CLIENT] Расшифрованный ответ: " << message << std::endl;
 });
 

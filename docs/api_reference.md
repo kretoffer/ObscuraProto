@@ -100,19 +100,10 @@ A helper class for fluently constructing `Payload` objects with various paramete
 #### `explicit PayloadBuilder(Payload::OpCode op_code)`
 Constructor. Initializes the builder with the specified operation code.
 
-#### `PayloadBuilder& add_param(const byte_vector& param)`
-Adds a parameter as a byte array. Uses length-prefix serialization (2 bytes for length + N bytes for data).
+#### `PayloadBuilder& add_param(const T& param)`
+Adds a parameter of a given type. The library has overloads for `std::string`, `byte_vector`, `bool`, `float`, `double`, and all standard integer types (`int8_t`, `uint8_t`, `int16_t`, `uint16_t`, etc.). All parameters are serialized using a length-prefix method.
 - **Returns:** A reference to the builder for method chaining.
-- **Throws:** `RuntimeError` if the parameter size exceeds `UINT16_MAX`.
-
-#### `PayloadBuilder& add_param(const std::string& param)`
-Adds a string parameter.
-- **Returns:** A reference to the builder for method chaining.
-- **Throws:** `RuntimeError` if the parameter size exceeds `UINT16_MAX`.
-
-#### `PayloadBuilder& add_param(uint32_t param)`
-Adds a `uint32_t` integer parameter. The integer is converted to network byte order (Big-Endian) and then length-prefixed.
-- **Returns:** A reference to the builder for method chaining.
+- **Throws:** `RuntimeError` if a string or byte_vector parameter's size exceeds `UINT16_MAX`.
 
 #### `Payload build()`
 Finalizes the construction and returns the `Payload` object.
@@ -125,20 +116,11 @@ A helper class for sequentially extracting parameters from a received `Payload`.
 #### `explicit PayloadReader(const Payload& payload)`
 Constructor. Initializes the reader with the `parameters` field from a `Payload` object.
 
-#### `byte_vector read_param_bytes()`
-Extracts the next parameter as a raw byte array.
-- **Returns:** The parameter as a `byte_vector`.
-- **Throws:** `RuntimeError` if the data is malformed or insufficient for the next parameter.
-
-#### `std::string read_param_string()`
-Extracts the next parameter as a string.
-- **Returns:** The parameter as a `std::string`.
-- **Throws:** `RuntimeError` if the data is malformed or insufficient for the next parameter.
-
-#### `uint32_t read_param_u32()`
-Extracts the next parameter as a `uint32_t` integer. The integer is converted from network byte order (Big-Endian) to host byte order.
-- **Returns:** The parameter as a `uint32_t`.
-- **Throws:** `RuntimeError` if the data is malformed, insufficient, or not exactly 4 bytes long.
+#### `template<typename T> T read_param()`
+Extracts the next parameter and casts it to the specified template type `T`. The method supports `std::string`, `byte_vector`, `bool`, `float`, `double`, and all standard integer types.
+- **Example:** `std::string name = reader.read_param<std::string>();`, `int score = reader.read_param<int32_t>();`
+- **Returns:** The parameter cast to type `T`.
+- **Throws:** `RuntimeError` if the data is malformed, insufficient, or if the stored parameter size does not match the size of the requested type `T`.
 
 #### `bool has_more() const`
 Checks if there are more parameters to read in the payload.

@@ -228,7 +228,7 @@ To send data, you must first construct a `Payload`.
     ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
         .add_param("my_username")
         .add_param("my_secret_password")
-        .add_param((uint32_t)1) // Example of adding an integer parameter
+        .add_param(1) // Example of adding an integer parameter
         .build();
 
     // Encrypt the payload to get a packet ready for transport
@@ -244,9 +244,9 @@ To send data, you must first construct a `Payload`.
 
         // Parse the parameters
         ObscuraProto::PayloadReader reader(decrypted_payload);
-        std::string username = reader.read_param_string();
-        std::string password = reader.read_param_string();
-        uint32_t login_attempts = reader.read_param_u32(); // Read the integer parameter
+        std::string username = reader.read_param<std::string>();
+        std::string password = reader.read_param<std::string>();
+        int login_attempts = reader.read_param<int>(); // Read the integer parameter
         
         // Use the data...
         std::cout << "Received username: " << username << ", password: " << password << ", attempts: " << login_attempts << std::endl;
@@ -297,7 +297,7 @@ The easiest way to handle a request is to register a specific handler for its op
 server.register_request_handler(0x3001, 
     [](auto hdl, ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
         // 1. Read parameters directly, no need to handle request_id
-        std::string client_message = reader.read_param_string();
+        std::string client_message = reader.read_param<std::string>();
         
         // 2. Simply return the response payload
         return ObscuraProto::PayloadBuilder(0x3002)
@@ -355,9 +355,9 @@ server.set_default_payload_handler([&server](auto hdl, ObscuraProto::Payload pay
     
     // Example of reading mixed parameters
     ObscuraProto::PayloadReader reader(payload);
-    std::string username = reader.read_param_string();
-    std::string password = reader.read_param_string();
-    uint32_t login_attempts = reader.read_param_u32();
+    std::string username = reader.read_param<std::string>();
+    std::string password = reader.read_param<std::string>();
+    uint32_t login_attempts = reader.read_param<uint32_t>();
     std::cout << "[SERVER] Decrypted: User=" << username << ", Pass=" << password << ", Attempts=" << login_attempts << std::endl;
 
     // Create and send a response (as a simple push message)
@@ -387,7 +387,7 @@ client.set_on_ready_callback([&client]() {
     ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
         .add_param("my_username")
         .add_param("my_password")
-        .add_param((uint32_t)1)
+        .add_param(1)
         .build();
     client.send(client_payload);
 });
@@ -396,7 +396,7 @@ client.set_on_ready_callback([&client]() {
 client.register_op_handler(0x2002, [](ObscuraProto::Payload payload) {
     std::cout << "[CLIENT] Received a response from the server." << std::endl;
     ObscuraProto::PayloadReader reader(payload);
-    std::string message = reader.read_param_string();
+    std::string message = reader.read_param<std::string>();
     std::cout << "[CLIENT] Decrypted response: " << message << std::endl;
 });
 

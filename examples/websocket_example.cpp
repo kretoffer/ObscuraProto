@@ -20,14 +20,16 @@ void print_payload(const std::string& prefix, const ObscuraProto::Payload& paylo
     try {
         ObscuraProto::PayloadReader reader(payload);
         if (payload.op_code == 0x1001) {
-            std::cout << prefix << "  Username: " << reader.read_param_string() << std::endl;
-            std::cout << prefix << "  Password: " << reader.read_param_string() << std::endl;
-            std::cout << prefix << "  Login Attempts: " << reader.read_param_u32() << std::endl;
+            std::cout << prefix << "  Username: " << reader.read_param<std::string>() << std::endl;
+            std::cout << prefix << "  Password: " << reader.read_param<std::string>() << std::endl;
+            std::cout << prefix << "  Login Attempts: " << reader.read_param<uint32_t>() << std::endl;
+        } else if (payload.op_code == 0x2002) {
+            std::cout << prefix << "  Message: " << reader.read_param<std::string>() << std::endl;
         } else {
             int i = 0;
             while(reader.has_more()) {
                 // Fallback for unknown payloads
-                auto bytes = reader.read_param_bytes();
+                auto bytes = reader.read_param<ObscuraProto::byte_vector>();
                 std::cout << prefix << "  Param " << i++ << " (bytes): " << bytes.size() << std::endl;
             }
         }
@@ -53,7 +55,8 @@ int main() {
     // 3. Start Server
     uint16_t port = 9002;
     ObscuraProto::net::WsServerWrapper server(server_long_term_key);
-    server.set_on_payload_callback([&server](auto hdl, ObscuraProto::Payload payload) {
+    // Use the default handler for incoming messages
+    server.set_default_payload_handler([&server](auto hdl, ObscuraProto::Payload payload) {
         std::cout << "[SERVER] Received payload from client." << std::endl;
         print_payload("[SERVER]", payload);
 
@@ -83,7 +86,8 @@ int main() {
         cv.notify_all();
     });
 
-    client.set_on_payload_callback([](ObscuraProto::Payload payload) {
+    // Use a specific handler for the server's response message
+    client.register_op_handler(0x2002, [](ObscuraProto::Payload payload) {
         std::cout << "[CLIENT] Received payload from server." << std::endl;
         print_payload("[CLIENT]", payload);
         std::lock_guard<std::mutex> lock(mtx);

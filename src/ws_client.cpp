@@ -215,8 +215,8 @@ void WsClientWrapper::on_message(WsConnectionHdl hdl, WsClientMessagePtr msg) {
             if (payload.op_code == RESPONSE_OP_CODE) {
                 // This is a response to a request
                 PayloadReader reader(payload);
-                uint32_t request_id = reader.read_param_u32();
-                byte_vector response_bytes = reader.read_param_bytes();
+                uint32_t request_id = reader.read_param<uint32_t>();
+                byte_vector response_bytes = reader.read_param<byte_vector>();
                 Payload response_payload = Payload::deserialize(response_bytes);
 
                 {
@@ -256,7 +256,7 @@ void WsClientWrapper::on_message(WsConnectionHdl hdl, WsClientMessagePtr msg) {
 
                 if (request_handler) {
                     PayloadReader reader(payload);
-                    uint32_t request_id = reader.read_param_u32();
+                    uint32_t request_id = reader.read_param<uint32_t>();
                     Payload response_payload = request_handler(reader);
                     send_response(request_id, response_payload);
                 } else if (op_handler) {
