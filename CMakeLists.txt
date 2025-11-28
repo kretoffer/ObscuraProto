@@ -102,3 +102,63 @@ target_link_libraries(obscuraproto
 
 # Add examples subdirectory
 add_subdirectory(examples)
+
+# ##############################################################################
+# # Installation
+# ##############################################################################
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+# Set the destination for the public headers
+set(INSTALL_INCLUDE_DIR ${CMAKE_INSTALL_INCLUDEDIR})
+
+# Install the public headers
+install(DIRECTORY include/
+    DESTINATION ${INSTALL_INCLUDE_DIR}
+)
+
+# Generate and install the package configuration file
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/ObscuraProtoConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY AnyNewerVersion
+)
+
+# Create an export set for the library target
+install(TARGETS obscuraproto
+    EXPORT ObscuraProtoTargets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${INSTALL_INCLUDE_DIR}
+)
+
+# Export dependencies
+# This ensures that consumers of this package will also find and link against
+# the dependencies like asio, websocketpp, and sodium.
+export(EXPORT ObscuraProtoTargets
+    FILE "${CMAKE_CURRENT_BINARY_DIR}/ObscuraProtoTargets.cmake"
+    NAMESPACE ObscuraProto::
+)
+
+# Configure the main package file
+configure_package_config_file(
+    "cmake/ObscuraProtoConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/ObscuraProtoConfig.cmake"
+    INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/ObscuraProto"
+    PATH_VARS INSTALL_INCLUDE_DIR
+)
+
+# Install the generated CMake files
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/ObscuraProtoConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/ObscuraProtoConfigVersion.cmake"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/ObscuraProto"
+)
+
+install(EXPORT ObscuraProtoTargets
+    FILE ObscuraProtoTargets.cmake
+    NAMESPACE ObscuraProto::
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/ObscuraProto"
+)

@@ -1,0 +1,22 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Find all dependencies for the project
+find_dependency(Threads REQUIRED)
+
+# Asio, websocketpp, and sodium were brought in via FetchContent.
+# When this project is consumed as a package, its dependencies need to be found on the system.
+# You might need to adjust these find_dependency calls if the packages
+# are not easily findable by default on the consumer's system.
+# For this example, we assume they can be found.
+find_dependency(asio REQUIRED)
+find_dependency(websocketpp REQUIRED)
+find_dependency(sodium REQUIRED)
+
+
+# Include the targets file
+include("${CMAKE_CURRENT_LIST_DIR}/ObscuraProtoTargets.cmake")
+
+# Check for required components
+check_required_components(ObscuraProto)
