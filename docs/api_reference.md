@@ -275,6 +275,12 @@ Registers a handler for a specific operation code. When a payload with a matchin
 - `op_code`: The operation code to handle.
 - `callback`: The function to call.
 
+#### `void register_request_handler(Payload::OpCode op_code, OnRequestCallback callback)`
+Registers a simplified handler for a request-response interaction. This is the recommended way to handle requests. The library automatically handles reading the request ID and sending the response.
+- `op_code`: The operation code of the request to handle.
+- `callback`: A function that takes a `PayloadReader&` to read the request parameters and must return a `Payload` object, which will be sent as the response.
+- **Callback signature:** `std::function<Payload(WsConnectionHdl, PayloadReader&)>`
+
 #### `void set_default_payload_handler(OnPayloadCallback callback)`
 Sets a callback function to be invoked when a `Payload` is received from any client and there is no specific handler registered for its `op_code`. This acts as a catch-all handler.
 - **Callback signature:** `std::function<void(WsConnectionHdl, Payload)>`
@@ -319,6 +325,12 @@ Sets a callback to be invoked when the handshake with the server is successfully
 Registers a handler for a specific operation code. When a payload with a matching `op_code` is received from the server, this callback will be invoked.
 - `op_code`: The operation code to handle.
 - `callback`: The function to call.
+
+#### `void register_request_handler(Payload::OpCode op_code, OnRequestCallback callback)`
+Registers a simplified handler for a request-response interaction with the server. This is the recommended way to handle requests. The library automatically handles reading the request ID and sending the response.
+- `op_code`: The operation code of the request to handle.
+- `callback`: A function that takes a `PayloadReader&` to read the request parameters and must return a `Payload` object, which will be sent as the response.
+- **Callback signature:** `std::function<Payload(PayloadReader&)>`
 
 #### `void set_default_payload_handler(OnPayloadCallback callback)`
 Sets a callback function to be invoked when a `Payload` is received from the server and there is no specific handler registered for its `op_code`.

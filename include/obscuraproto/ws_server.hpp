@@ -16,6 +16,7 @@ namespace net {
 class WsServerWrapper {
 public:
     using OnPayloadCallback = std::function<void(WsConnectionHdl, Payload)>;
+    using OnRequestCallback = std::function<Payload(WsConnectionHdl, PayloadReader&)>;
 
     WsServerWrapper(KeyPair server_sign_key);
     ~WsServerWrapper();
@@ -48,6 +49,14 @@ public:
     void register_op_handler(Payload::OpCode op_code, OnPayloadCallback callback);
 
     /**
+     * @brief Registers a simplified handler for a request-response flow.
+     * @param op_code The operation code of the request to handle.
+     * @param callback The function to call. It receives a reader for the request parameters
+     *                 and should return a payload for the response.
+     */
+    void register_request_handler(Payload::OpCode op_code, OnRequestCallback callback);
+
+    /**
      * @brief Sets a default handler for any operation code that doesn't have a specific handler registered.
      * @param callback The function to call.
      */
@@ -69,6 +78,7 @@ private:
     
     std::mutex op_handlers_mutex_;
     std::map<Payload::OpCode, OnPayloadCallback> op_code_handlers_;
+    std::map<Payload::OpCode, OnRequestCallback> request_handlers_;
     OnPayloadCallback default_payload_handler_;
     
     std::unique_ptr<std::thread> server_thread_;

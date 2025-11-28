@@ -121,6 +121,11 @@ void WsServerWrapper::register_op_handler(Payload::OpCode op_code, OnPayloadCall
     op_code_handlers_[op_code] = std::move(callback);
 }
 
+void WsServerWrapper::register_request_handler(Payload::OpCode op_code, OnRequestCallback callback) {
+    std::lock_guard<std::mutex> lock(op_handlers_mutex_);
+    request_handlers_[op_code] = std::move(callback);
+}
+
 void WsServerWrapper::set_default_payload_handler(OnPayloadCallback callback) {
     std::lock_guard<std::mutex> lock(op_handlers_mutex_);
     default_payload_handler_ = std::move(callback);
@@ -196,22 +201,34 @@ void WsServerWrapper::on_message(WsConnectionHdl hdl, WsMessagePtr msg) {
             } else {
                 // This is a regular message or a request from the client
                 bool handled = false;
-                OnPayloadCallback handler;
+                OnRequestCallback request_handler;
+                OnPayloadCallback op_handler;
                 OnPayloadCallback default_handler;
 
                 {
                     std::lock_guard<std::mutex> lock(op_handlers_mutex_);
-                    auto it = op_code_handlers_.find(payload.op_code);
-                    if (it != op_code_handlers_.end()) {
-                        handler = it->second;
+                    auto req_it = request_handlers_.find(payload.op_code);
+                    if (req_it != request_handlers_.end()) {
+                        request_handler = req_it->second;
                         handled = true;
                     } else {
-                        default_handler = default_payload_handler_;
+                        auto op_it = op_code_handlers_.find(payload.op_code);
+                        if (op_it != op_code_handlers_.end()) {
+                            op_handler = op_it->second;
+                            handled = true;
+                        } else {
+                            default_handler = default_payload_handler_;
+                        }
                     }
                 }
 
-                if (handled) {
-                    handler(hdl, std::move(payload));
+                if (request_handler) {
+                    PayloadReader reader(payload);
+                    uint32_t request_id = reader.read_param_u32();
+                    Payload response_payload = request_handler(hdl, reader);
+                    send_response(hdl, request_id, response_payload);
+                } else if (op_handler) {
+                    op_handler(hdl, std::move(payload));
                 } else if (default_handler) {
                     default_handler(hdl, std::move(payload));
                 }

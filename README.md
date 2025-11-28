@@ -265,7 +265,9 @@ The full example can be found in `examples/websocket_example.cpp`.
 
 ### 6.1. Bidirectional Request-Response Pattern
 
-To simplify common request-response interactions, the high-level API provides dedicated methods for a **fully bidirectional** flow. Both the client and the server can initiate requests and respond to them. This pattern uses a special internal operation code (`0xFFFF`) for responses and prepends a unique request ID to the payload parameters.
+To simplify common request-response interactions, the high-level API provides dedicated methods for a **fully bidirectional** flow. Both the client and the server can initiate requests and respond to them. The recommended way to handle incoming requests is to use the `register_request_handler` method, which automates response management.
+
+This pattern uses a special internal operation code (`0xFFFF`) for responses and prepends a unique request ID to the payload parameters, but this complexity is hidden from you when using the simplified handlers.
 
 #### Initiating a Request
 
@@ -286,42 +288,36 @@ if (response_future.wait_for(std::chrono::seconds(5)) == std::future_status::rea
 }
 ```
 
-#### Handling a Request and Sending a Response
+#### Handling a Request and Sending a Response (Recommended)
 
-Requests from the other party are received in the standard `on_payload_callback`. Your application logic should identify the message as a request, parse its parameters (including the request ID), and use the corresponding `send_response` method.
-
--   **Request Payload Structure**: The first parameter is always the `uint32_t` request ID, followed by your application-specific parameters.
--   **Handling Logic**:
-    1.  In `on_payload_callback`, check the `op_code` to identify a request.
-    2.  Use `PayloadReader` to read the `request_id` first, then other parameters.
-    3.  Create your application-level response `Payload`.
-    4.  Call `send_response(request_id, response_payload)` on the client or `send_response(hdl, request_id, response_payload)` on the server.
+The easiest way to handle a request is to register a specific handler for its operation code using `register_request_handler`. This method takes a callback that receives a `PayloadReader` for the request's parameters and must return a `Payload` object for the response. The library handles the request ID and sends the response automatically.
 
 ```cpp
 // Server-side example of handling a client's request
-server.set_on_payload_callback([&server](auto hdl, ObscuraProto::Payload payload) {
-    if (payload.op_code == 0x3001) { // A request from a client
-        ObscuraProto::PayloadReader reader(payload);
-        uint32_t request_id = reader.read_param_u32(); // 1. Read ID
-        // ... read other params ...
+server.register_request_handler(0x3001, 
+    [](auto hdl, ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
+        // 1. Read parameters directly, no need to handle request_id
+        std::string client_message = reader.read_param_string();
         
-        ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x3002).build();
-        server.send_response(hdl, request_id, response_payload); // 2. Send response
+        // 2. Simply return the response payload
+        return ObscuraProto::PayloadBuilder(0x3002)
+            .add_param("Server got your message: " + client_message)
+            .build();
     }
-});
+);
 
 // Client-side example of handling a server's request
-client.set_on_payload_callback([&client](ObscuraProto::Payload payload) {
-    if (payload.op_code == 0x4001) { // A request from the server
-        ObscuraProto::PayloadReader reader(payload);
-        uint32_t request_id = reader.read_param_u32(); // 1. Read ID
-        // ... read other params ...
-
-        ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x4002).build();
-        client.send_response(request_id, response_payload); // 2. Send response
+client.register_request_handler(0x4001, 
+    [](ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
+        // 1. Read parameters...
+        
+        // 2. Return the response payload
+        return ObscuraProto::PayloadBuilder(0x4002).build();
     }
-});
+);
 ```
+
+For more advanced scenarios where you might not want to respond immediately, you can use `register_op_handler` and manually read the `request_id` and call `send_response`.
 
 A complete example demonstrating this bidirectional pattern can be found in `examples/request_response_example.cpp`.
 
@@ -345,7 +341,7 @@ client_view_of_server_key.publicKey = server_long_term_key.publicKey;
 
 ### Step 2: Running the Server
 
-Create a `WsServerWrapper`, set a callback to handle incoming data, and run it on a port.
+Create a `WsServerWrapper`, set callbacks to handle incoming data, and run it on a port. You can register handlers for specific `op_code`s or a default handler for any unhandled messages.
 
 ```cpp
 #include "obscuraproto/ws_server.hpp"
@@ -353,9 +349,9 @@ Create a `WsServerWrapper`, set a callback to handle incoming data, and run it o
 // Create the server
 ObscuraProto::net::WsServerWrapper server(server_long_term_key);
 
-// Register a handler for a specific operation code (e.g., 0x1001)
-server.register_op_handler(0x1001, [&server](auto hdl, ObscuraProto::Payload payload) {
-    std::cout << "[SERVER] Received a payload with op_code 0x1001." << std::endl;
+// Set a default handler for any non-request payloads
+server.set_default_payload_handler([&server](auto hdl, ObscuraProto::Payload payload) {
+    std::cout << "[SERVER] Received a payload with op_code 0x" << std::hex << payload.op_code << std::dec << std::endl;
     
     // Example of reading mixed parameters
     ObscuraProto::PayloadReader reader(payload);
@@ -364,7 +360,7 @@ server.register_op_handler(0x1001, [&server](auto hdl, ObscuraProto::Payload pay
     uint32_t login_attempts = reader.read_param_u32();
     std::cout << "[SERVER] Decrypted: User=" << username << ", Pass=" << password << ", Attempts=" << login_attempts << std::endl;
 
-    // Create and send a response
+    // Create and send a response (as a simple push message)
     ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x2002)
         .add_param("Hello from server!")
         .build();
@@ -396,7 +392,7 @@ client.set_on_ready_callback([&client]() {
     client.send(client_payload);
 });
 
-// Register a handler for the response from the server (e.g., op_code 0x2002)
+// Register a handler for a specific op_code from the server
 client.register_op_handler(0x2002, [](ObscuraProto::Payload payload) {
     std::cout << "[CLIENT] Received a response from the server." << std::endl;
     ObscuraProto::PayloadReader reader(payload);

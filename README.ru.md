@@ -265,7 +265,9 @@ ObscuraProto::Session client_session(ObscuraProto::Role::CLIENT, client_view_of_
 
 ### 6.1. Двунаправленный паттерн Запрос-Ответ
 
-Для упрощения типовых взаимодействий "запрос-ответ" высокоуровневый API предоставляет специализированные методы для **полностью двунаправленного** обмена. И клиент, и сервер могут инициировать запросы и отвечать на них. Этот паттерн использует специальный внутренний код операции (`0xFFFF`) для ответов и добавляет уникальный ID запроса в начало параметров полезной нагрузки.
+Для упрощения типовых взаимодействий "запрос-ответ" высокоуровневый API предоставляет специализированные методы для **полностью двунаправленного** обмена. И клиент, и сервер могут инициировать запросы и отвечать на них. Рекомендуемый способ обработки входящих запросов — использование метода `register_request_handler`, который автоматизирует управление ответами.
+
+Этот паттерн использует специальный внутренний код операции (`0xFFFF`) для ответов и добавляет уникальный ID запроса в начало параметров полезной нагрузки, но эта сложность скрыта от вас при использовании упрощенных обработчиков.
 
 #### Инициация запроса
 
@@ -286,42 +288,36 @@ if (response_future.wait_for(std::chrono::seconds(5)) == std::future_status::rea
 }
 ```
 
-#### Обработка запроса и отправка ответа
+#### Обработка запроса и отправка ответа (рекомендуемый способ)
 
-Запросы от другой стороны приходят в стандартный колбэк `on_payload_callback`. Ваша логика приложения должна определить, что сообщение является запросом, разобрать его параметры (включая ID запроса) и использовать соответствующий метод `send_response`.
-
--   **Структура полезной нагрузки запроса**: Первым параметром всегда идет `uint32_t` ID запроса, за которым следуют ваши специфичные для приложения параметры.
--   **Логика обработки**:
-    1.  В `on_payload_callback` проверьте `op_code`, чтобы определить, что это запрос.
-    2.  Используйте `PayloadReader`, чтобы сначала прочитать `request_id`, а затем остальные параметры.
-    3.  Создайте `Payload` ответа на уровне вашего приложения.
-    4.  Вызовите `send_response(request_id, response_payload)` на клиенте или `send_response(hdl, request_id, response_payload)` на сервере.
+Самый простой способ обработать запрос — зарегистрировать специальный обработчик для его кода операции с помощью `register_request_handler`. Этот метод принимает колбэк, который получает `PayloadReader` для параметров запроса и должен вернуть объект `Payload` для ответа. Библиотека сама позаботится об ID запроса и отправке ответа.
 
 ```cpp
 // Пример обработки запроса от клиента на сервере
-server.set_on_payload_callback([&server](auto hdl, ObscuraProto::Payload payload) {
-    if (payload.op_code == 0x3001) { // Запрос от клиента
-        ObscuraProto::PayloadReader reader(payload);
-        uint32_t request_id = reader.read_param_u32(); // 1. Читаем ID
-        // ... читаем другие параметры ...
+server.register_request_handler(0x3001, 
+    [](auto hdl, ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
+        // 1. Читаем параметры напрямую, без необходимости обрабатывать request_id
+        std::string client_message = reader.read_param_string();
         
-        ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x3002).build();
-        server.send_response(hdl, request_id, response_payload); // 2. Отправляем ответ
+        // 2. Просто возвращаем полезную нагрузку ответа
+        return ObscuraProto::PayloadBuilder(0x3002)
+            .add_param("Сервер получил ваше сообщение: " + client_message)
+            .build();
     }
-});
+);
 
 // Пример обработки запроса от сервера на клиенте
-client.set_on_payload_callback([&client](ObscuraProto::Payload payload) {
-    if (payload.op_code == 0x4001) { // Запрос от сервера
-        ObscuraProto::PayloadReader reader(payload);
-        uint32_t request_id = reader.read_param_u32(); // 1. Читаем ID
-        // ... читаем другие параметры ...
-
-        ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x4002).build();
-        client.send_response(request_id, response_payload); // 2. Отправляем ответ
+client.register_request_handler(0x4001, 
+    [](ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
+        // 1. Читаем параметры...
+        
+        // 2. Возвращаем полезную нагрузку ответа
+        return ObscuraProto::PayloadBuilder(0x4002).build();
     }
-});
+);
 ```
+
+Для более сложных сценариев, где вы не хотите отвечать немедленно, можно использовать `register_op_handler` и вручную считывать `request_id`, а затем вызывать `send_response`.
 
 Полный пример, демонстрирующий этот двунаправленный паттерн, можно найти в файле `examples/request_response_example.cpp`.
 
@@ -345,7 +341,7 @@ client_view_of_server_key.publicKey = server_long_term_key.publicKey;
 
 ### Шаг 2: Запуск сервера
 
-Создайте `WsServerWrapper`, установите функцию обратного вызова для обработки входящих данных и запустите его на порту.
+Создайте `WsServerWrapper`, установите функции обратного вызова для обработки входящих данных и запустите его на порту. Вы можете зарегистрировать обработчики для конкретных `op_code` или обработчик по умолчанию для любых необработанных сообщений.
 
 ```cpp
 #include "obscuraproto/ws_server.hpp"
@@ -353,9 +349,9 @@ client_view_of_server_key.publicKey = server_long_term_key.publicKey;
 // Создаем сервер
 ObscuraProto::net::WsServerWrapper server(server_long_term_key);
 
-// Регистрируем обработчик для конкретного кода операции (например, 0x1001)
-server.register_op_handler(0x1001, [&server](auto hdl, ObscuraProto::Payload payload) {
-    std::cout << "[SERVER] Получена полезная нагрузка с op_code 0x1001." << std::endl;
+// Устанавливаем обработчик по умолчанию для любых полезных нагрузок, не являющихся запросами
+server.set_default_payload_handler([&server](auto hdl, ObscuraProto::Payload payload) {
+    std::cout << "[SERVER] Получена полезная нагрузка с op_code 0x" << std::hex << payload.op_code << std::dec << std::endl;
     
     // Пример чтения смешанных параметров
     ObscuraProto::PayloadReader reader(payload);
@@ -364,7 +360,7 @@ server.register_op_handler(0x1001, [&server](auto hdl, ObscuraProto::Payload pay
     uint32_t login_attempts = reader.read_param_u32();
     std::cout << "[SERVER] Расшифровано: User=" << username << ", Pass=" << password << ", Attempts=" << login_attempts << std::endl;
 
-    // Создаем и отправляем ответ
+    // Создаем и отправляем ответ (как простое push-сообщение)
     ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x2002)
         .add_param("Привет от сервера!")
         .build();

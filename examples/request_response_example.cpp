@@ -6,7 +6,7 @@
 #include <thread>
 #include <future>
 
-// This example demonstrates the BI-DIRECTIONAL request-response pattern.
+// This example demonstrates the BI-DIRECTIONAL request-response pattern using the simplified API.
 // 1. The client connects and sends a request to the server.
 // 2. The server receives the request, sends a response, and then immediately sends its own request to the client.
 // 3. The client receives the server's response and fulfills the first future.
@@ -37,20 +37,13 @@ int main() {
     // 3. Start Server
     uint16_t port = 9003;
     ObscuraProto::net::WsServerWrapper server(server_long_term_key);
-    server.set_on_payload_callback([&](auto hdl, ObscuraProto::Payload payload) {
-        if (payload.op_code == OP_C2S_ECHO_REQUEST) {
-            std::cout << "[SERVER] Received client's echo request." << std::endl;
-            
-            ObscuraProto::PayloadReader reader(payload);
-            uint32_t request_id = reader.read_param_u32();
-            std::string message = reader.read_param_string();
 
-            // Send a response to the client's request
-            ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(OP_C2S_ECHO_RESPONSE)
-                .add_param("Echoing back: " + message)
-                .build();
-            server.send_response(hdl, request_id, response_payload);
-            std::cout << "[SERVER] Sent response to client." << std::endl;
+    // Register a handler for the client's echo request using the new simplified API
+    server.register_request_handler(OP_C2S_ECHO_REQUEST, 
+        [&](auto hdl, ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
+            
+            std::cout << "[SERVER] Received client's echo request." << std::endl;
+            std::string message = reader.read_param_string();
 
             // To avoid blocking the network thread, run the server-initiated request in a new thread.
             std::thread([&, hdl, done_promise = &server_request_done_promise]() {
@@ -74,8 +67,14 @@ int main() {
                 }
                 done_promise->set_value();
             }).detach(); // Detach the thread to let it run independently.
+
+            // Simply return the response payload. The library handles sending it.
+            std::cout << "[SERVER] Sent response to client." << std::endl;
+            return ObscuraProto::PayloadBuilder(OP_C2S_ECHO_RESPONSE)
+                .add_param("Echoing back: " + message)
+                .build();
         }
-    });
+    );
 
     server.run(port);
     std::cout << "[SERVER] Started on port " << port << std::endl;
@@ -92,25 +91,22 @@ int main() {
         ready_promise.set_value();
     });
 
-    client.set_on_payload_callback([&](ObscuraProto::Payload payload){
-        if (payload.op_code == OP_S2C_TIME_REQUEST) {
+    // Register a handler for the server's time request using the new simplified API
+    client.register_request_handler(OP_S2C_TIME_REQUEST, 
+        [&](ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
             std::cout << "[CLIENT] Received time request from server." << std::endl;
-            ObscuraProto::PayloadReader reader(payload);
-            uint32_t request_id = reader.read_param_u32();
-
+            
             auto now = std::chrono::system_clock::now();
             auto time_t = std::chrono::system_clock::to_time_t(now);
             std::string time_str = std::ctime(&time_t);
             time_str.pop_back(); // remove newline
 
-            ObscuraProto::Payload response = ObscuraProto::PayloadBuilder(OP_S2C_TIME_RESPONSE)
+            std::cout << "[CLIENT] Sending time response to server..." << std::endl;
+            return ObscuraProto::PayloadBuilder(OP_S2C_TIME_RESPONSE)
                 .add_param("The time is: " + time_str)
                 .build();
-            
-            std::cout << "[CLIENT] Sending time response to server..." << std::endl;
-            client.send_response(request_id, response);
         }
-    });
+    );
 
     client.connect("ws://localhost:" + std::to_string(port));
     std::cout << "[CLIENT] Connecting to server..." << std::endl;
