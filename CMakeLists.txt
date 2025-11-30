@@ -66,9 +66,10 @@ target_sources(obscuraproto
 # Public include directories
 target_include_directories(obscuraproto
     PUBLIC
-        ${PROJECT_SOURCE_DIR}/include
-        ${asio_SOURCE_DIR}/asio/include
-        ${websocketpp_SOURCE_DIR}
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+        $<BUILD_INTERFACE:${asio_SOURCE_DIR}/asio/include>
+        $<BUILD_INTERFACE:${websocketpp_SOURCE_DIR}>
 )
 
 # Add compile definitions
@@ -89,11 +90,13 @@ target_link_libraries(obscuraproto
 # ##############################################################################
 # # Tests (optional, using GoogleTest)
 # ##############################################################################
-#
-# enable_testing()
-#
-# # Add tests subdirectory
-# add_subdirectory(tests)
+
+option(BUILD_TESTING "Build the tests" ON)
+
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 
 # ##############################################################################
