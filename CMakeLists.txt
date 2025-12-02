@@ -70,8 +70,6 @@ target_include_directories(obscuraproto
         $<INSTALL_INTERFACE:include>
         $<BUILD_INTERFACE:${asio_SOURCE_DIR}/asio/include>
         $<BUILD_INTERFACE:${websocketpp_SOURCE_DIR}>
-        $<BUILD_INTERFACE:${libsodium_SOURCE_DIR}/src/libsodium/include>
-        $<BUILD_INTERFACE:${libsodium_BINARY_DIR}/src/libsodium/include>
 )
 
 # Add compile definitions
@@ -84,7 +82,7 @@ target_compile_definitions(obscuraproto
 find_package(Threads REQUIRED)
 target_link_libraries(obscuraproto
     PUBLIC
-        libsodium
+        sodium
         Threads::Threads
 )
 
