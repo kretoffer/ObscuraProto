@@ -11,21 +11,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 # ##############################################################################
-# # Cryptography Library (libsodium)
+# # Cryptography Library
 # ##############################################################################
 include(FetchContent)
-
-# Declare libsodium dependency.
-# For production, it is highly recommended to pin this to a specific GIT_TAG
-# or commit hash.
-FetchContent_Declare(
-    libsodium
-    GIT_REPOSITORY https://github.com/jedisct1/libsodium.git
-    GIT_TAG        1.0.18 # Using a stable tag
-)
-
-# Make libsodium available to the project
-FetchContent_MakeAvailable(libsodium)
 
 # Declare asio dependency (for websocketpp)
 FetchContent_Declare(
@@ -42,6 +30,14 @@ FetchContent_Declare(
     GIT_TAG 0.8.2 # Using a stable tag
 )
 FetchContent_MakeAvailable(websocketpp)
+
+# Declare libsodium dependency
+FetchContent_Declare(
+    libsodium
+    GIT_REPOSITORY https://github.com/jedisct1/libsodium.git
+    GIT_TAG 1.0.18 # Using a stable tag
+)
+FetchContent_MakeAvailable(libsodium)
 
 
 
@@ -70,6 +66,7 @@ target_include_directories(obscuraproto
         $<INSTALL_INTERFACE:include>
         $<BUILD_INTERFACE:${asio_SOURCE_DIR}/asio/include>
         $<BUILD_INTERFACE:${websocketpp_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${libsodium_SOURCE_DIR}/src/libsodium/include>
 )
 
 # Add compile definitions
@@ -82,8 +79,8 @@ target_compile_definitions(obscuraproto
 find_package(Threads REQUIRED)
 target_link_libraries(obscuraproto
     PUBLIC
-        sodium
         Threads::Threads
+        sodium
 )
 
 
