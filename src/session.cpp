@@ -1,6 +1,7 @@
 #include "obscuraproto/session.hpp"
 
 #include <algorithm>
+#include <optional>
 
 #include "obscuraproto/errors.hpp"
 
@@ -34,17 +35,13 @@ namespace ObscuraProto {
             throw LogicError("Only servers can respond to a handshake.");
         }
 
-        // 1. Select a compatible protocol version
-        bool version_supported = false;
-        for (const auto& v : client_hello.supported_versions) {
-            if (v == Versions::V1_0) {
-                version_supported = true;
-                break;
-            }
+        // 1. Select a compatible protocol version.
+        auto chosen_version = VersionNegotiator::negotiate(client_hello.supported_versions, SUPPORTED_VERSIONS);
+
+        if (!chosen_version) {
+            throw RuntimeError("Client and server have no supported protocol versions in common.");
         }
-        if (!version_supported) {
-            throw RuntimeError("Client does not support a compatible version.");
-        }
+        selected_version_ = *chosen_version;
 
         // 2. Generate an ephemeral key pair for this session
         ephemeral_kx_kp_ = std::make_unique<KeyPair>(Crypto::generate_kx_keypair());
@@ -58,7 +55,7 @@ namespace ObscuraProto {
 
         // 5. Create the ServerHello message
         ServerHello hello;
-        hello.selected_version = Versions::V1_0;
+        hello.selected_version = *selected_version_;
         hello.ephemeral_pk = ephemeral_kx_kp_->publicKey;
         hello.signature = signature;
 
@@ -75,9 +72,17 @@ namespace ObscuraProto {
         }
 
         // 1. Verify that the server selected a version we support
-        if (server_hello.selected_version != Versions::V1_0) {
-            throw RuntimeError("Server selected an unsupported version.");
+        bool version_is_supported = false;
+        for (const auto& supported_ver : SUPPORTED_VERSIONS) {
+            if (server_hello.selected_version == supported_ver) {
+                version_is_supported = true;
+                break;
+            }
         }
+        if (!version_is_supported) {
+            throw RuntimeError("Server selected a protocol version that the client does not support.");
+        }
+        selected_version_ = server_hello.selected_version;
 
         // 2. Verify the signature of the server's ephemeral key
         bool signature_valid =
@@ -95,6 +100,10 @@ namespace ObscuraProto {
 
     bool Session::is_handshake_complete() const {
         return handshake_complete_;
+    }
+
+    std::optional<Version> Session::get_selected_version() const {
+        return selected_version_;
     }
 
     // --- Data Transfer ---

@@ -17,6 +17,7 @@ add_executable(obscuraproto_tests
     crypto_test.cpp
     packet_test.cpp
     handshake_messages_test.cpp
+    version_negotiation_test.cpp
 )
 
 # Link the test executable against the main library and Google Test

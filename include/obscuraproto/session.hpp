@@ -70,9 +70,16 @@ namespace ObscuraProto {
          */
         bool is_handshake_complete() const;
 
+        /**
+         * @brief Gets the negotiated protocol version.
+         * @return The selected version, or std::nullopt if handshake is not complete.
+         */
+        std::optional<Version> get_selected_version() const;
+
     private:
         Role role_;
         bool handshake_complete_ = false;
+        std::optional<Version> selected_version_ = std::nullopt;
 
         // Long-term signing key. For the server, this contains the private key.
         // For the client, this contains the server's public key.

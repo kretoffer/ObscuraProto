@@ -3,6 +3,8 @@
 #include <arpa/inet.h>  // For htons, ntohs
 #include <sodium.h>
 
+#include <atomic>
+
 #include "obscuraproto/errors.hpp"
 
 // Helper for 64-bit network byte order conversion
@@ -20,8 +22,19 @@ static uint64_t ntohll_local(uint64_t val) {
 
 namespace ObscuraProto {
 
+    static std::atomic<bool> g_sodium_initialized = false;
+
     int Crypto::init() {
-        return sodium_init();
+        if (g_sodium_initialized) {
+            return 0;  // Already successfully initialized
+        }
+
+        if (sodium_init() < 0) {
+            return -1;  // Initialization failed
+        }
+
+        g_sodium_initialized = true;
+        return 0;
     }
 
     KeyPair Crypto::generate_kx_keypair() {

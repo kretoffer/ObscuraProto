@@ -3,4 +3,5 @@ repos:
     rev: v17.0.6 # Use a recent version, check pre-commit mirrors for latest
     hooks:
       - id: clang-format
-        types: [c++, c]
+        files: \.(cpp|hpp)$
+

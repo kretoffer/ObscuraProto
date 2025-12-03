@@ -54,6 +54,7 @@ target_sources(obscuraproto
         src/packet.cpp
         src/crypto.cpp
         src/session.cpp
+        src/version.cpp
         src/handshake_messages.cpp
         src/ws_client.cpp
         src/ws_server.cpp

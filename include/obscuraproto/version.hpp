@@ -2,6 +2,7 @@
 #define OBSCURAPROTO_VERSION_HPP
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace ObscuraProto {
@@ -14,8 +15,27 @@ namespace ObscuraProto {
         constexpr Version V1_0 = 0x0100;
     }
 
-    // A list of supported versions.
+    // A list of supported versions, in descending order of preference.
     const std::vector<Version> SUPPORTED_VERSIONS = {Versions::V1_0};
+
+    /**
+     * @brief Handles the logic for negotiating a common protocol version.
+     */
+    class VersionNegotiator {
+    public:
+        /**
+         * @brief Selects the best common version between a client and a server.
+         *
+         * It iterates through the client's preferred versions and returns the first
+         * one that is also present in the server's list of supported versions.
+         *
+         * @param client_versions A list of versions supported by the client, in descending order of preference.
+         * @param server_versions A list of versions supported by the server.
+         * @return The selected version, or std::nullopt if no common version is found.
+         */
+        static std::optional<Version> negotiate(const std::vector<Version>& client_versions,
+                                                const std::vector<Version>& server_versions);
+    };
 
 }  // namespace ObscuraProto
 
