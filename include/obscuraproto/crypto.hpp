@@ -1,9 +1,10 @@
 #ifndef OBSCURAPROTO_CRYPTO_HPP
 #define OBSCURAPROTO_CRYPTO_HPP
 
+#include <string>
+
 #include "keys.hpp"
 #include "packet.hpp"
-#include <string>
 
 namespace ObscuraProto {
 
@@ -48,8 +49,8 @@ namespace ObscuraProto {
          * @brief A structure to hold the two derived symmetric keys from ECDH.
          */
         struct SessionKeys {
-            byte_vector rx; // Key for receiving data
-            byte_vector tx; // Key for sending data
+            byte_vector rx;  // Key for receiving data
+            byte_vector tx;  // Key for sending data
         };
 
         /**
@@ -95,6 +96,6 @@ namespace ObscuraProto {
         static DecryptedResult decrypt(const EncryptedPacket& packet, const byte_vector& key);
     };
 
-} // namespace ObscuraProto
+}  // namespace ObscuraProto
 
-#endif // OBSCURAPROTO_CRYPTO_HPP
+#endif  // OBSCURAPROTO_CRYPTO_HPP

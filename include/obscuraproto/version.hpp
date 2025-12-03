@@ -15,10 +15,8 @@ namespace ObscuraProto {
     }
 
     // A list of supported versions.
-    const std::vector<Version> SUPPORTED_VERSIONS = {
-        Versions::V1_0
-    };
+    const std::vector<Version> SUPPORTED_VERSIONS = {Versions::V1_0};
 
-} // namespace ObscuraProto
+}  // namespace ObscuraProto
 
-#endif // OBSCURAPROTO_VERSION_HPP
+#endif  // OBSCURAPROTO_VERSION_HPP

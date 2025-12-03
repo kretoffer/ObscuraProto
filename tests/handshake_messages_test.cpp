@@ -1,6 +1,8 @@
-#include <gtest/gtest.h>
 #include "obscuraproto/handshake_messages.hpp"
-#include "obscuraproto/crypto.hpp" // For key generation
+
+#include <gtest/gtest.h>
+
+#include "obscuraproto/crypto.hpp"  // For key generation
 #include "obscuraproto/version.hpp"
 
 TEST(HandshakeMessagesTest, ClientHelloSerialization) {
@@ -26,7 +28,7 @@ TEST(HandshakeMessagesTest, ServerHelloSerialization) {
     original_msg.selected_version = ObscuraProto::Versions::V1_0;
     auto keypair = ObscuraProto::Crypto::generate_kx_keypair();
     original_msg.ephemeral_pk = keypair.publicKey;
-    original_msg.signature.data.resize(64, 0xCC); // Fill with dummy data
+    original_msg.signature.data.resize(64, 0xCC);  // Fill with dummy data
 
     auto serialized = original_msg.serialize();
     auto deserialized = ObscuraProto::ServerHello::deserialize(serialized);

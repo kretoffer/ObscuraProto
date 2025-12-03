@@ -1,26 +1,28 @@
 #ifndef OBSCURAPROTO_PACKET_HPP
 #define OBSCURAPROTO_PACKET_HPP
 
-#include <vector>
+#include <arpa/inet.h>
+
 #include <cstdint>
 #include <string>
-#include <arpa/inet.h>
+#include <vector>
+
 #include "errors.hpp"
 
 namespace ObscuraProto {
 
     namespace detail {
-        #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
         static uint64_t htonll_local(uint64_t val) {
-            return (((uint64_t)htonl(val)) << 32) + htonl(val >> 32);
+            return (((uint64_t) htonl(val)) << 32) + htonl(val >> 32);
         }
         static uint64_t ntohll_local(uint64_t val) {
-            return (((uint64_t)ntohl(val)) << 32) + ntohl(val >> 32);
+            return (((uint64_t) ntohl(val)) << 32) + ntohl(val >> 32);
         }
-        #else
-        #define htonll_local(x) (x)
-        #define ntohll_local(x) (x)
-        #endif
+#else
+#define htonll_local(x) (x)
+#define ntohll_local(x) (x)
+#endif
     }
 
     // Using a simple vector of bytes for data representation.
@@ -65,7 +67,7 @@ namespace ObscuraProto {
         PayloadBuilder& add_param(const byte_vector& param);
         PayloadBuilder& add_param(const std::string& param);
         PayloadBuilder& add_param(const char* param);
-        
+
         PayloadBuilder& add_param(bool param);
         PayloadBuilder& add_param(int8_t param);
         PayloadBuilder& add_param(uint8_t param);
@@ -91,7 +93,7 @@ namespace ObscuraProto {
     public:
         explicit PayloadReader(const Payload& payload);
 
-        template<typename T>
+        template <typename T>
         T read_param() {
             byte_vector vec = read_param_bytes();
             if (vec.size() != sizeof(T)) {
@@ -119,17 +121,17 @@ namespace ObscuraProto {
         size_t offset_ = 0;
     };
 
-    template<>
+    template <>
     inline std::string PayloadReader::read_param<std::string>() {
         byte_vector vec = read_param_bytes();
         return std::string(vec.begin(), vec.end());
     }
 
-    template<>
+    template <>
     inline byte_vector PayloadReader::read_param<byte_vector>() {
         return read_param_bytes();
     }
 
-} // namespace ObscuraProto
+}  // namespace ObscuraProto
 
-#endif // OBSCURAPROTO_PACKET_HPP
+#endif  // OBSCURAPROTO_PACKET_HPP

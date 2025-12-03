@@ -1,11 +1,12 @@
-#include "obscuraproto/ws_server.hpp"
-#include "obscuraproto/ws_client.hpp"
-#include "obscuraproto/crypto.hpp"
-#include <iostream>
 #include <chrono>
-#include <thread>
 #include <condition_variable>
+#include <iostream>
 #include <mutex>
+#include <thread>
+
+#include "obscuraproto/crypto.hpp"
+#include "obscuraproto/ws_client.hpp"
+#include "obscuraproto/ws_server.hpp"
 
 // Shared state for synchronization
 std::mutex mtx;
@@ -27,7 +28,7 @@ void print_payload(const std::string& prefix, const ObscuraProto::Payload& paylo
             std::cout << prefix << "  Message: " << reader.read_param<std::string>() << std::endl;
         } else {
             int i = 0;
-            while(reader.has_more()) {
+            while (reader.has_more()) {
                 // Fallback for unknown payloads
                 auto bytes = reader.read_param<ObscuraProto::byte_vector>();
                 std::cout << prefix << "  Param " << i++ << " (bytes): " << bytes.size() << std::endl;
@@ -61,9 +62,8 @@ int main() {
         print_payload("[SERVER]", payload);
 
         // Send a response
-        ObscuraProto::Payload response_payload = ObscuraProto::PayloadBuilder(0x2002)
-            .add_param("Hello from server!")
-            .build();
+        ObscuraProto::Payload response_payload =
+            ObscuraProto::PayloadBuilder(0x2002).add_param("Hello from server!").build();
         server.send(hdl, response_payload);
 
         std::lock_guard<std::mutex> lock(mtx);
@@ -95,9 +95,7 @@ int main() {
         cv.notify_all();
     });
 
-    client.set_on_disconnect_callback([](){
-        std::cout << "[CLIENT] Disconnected from server." << std::endl;
-    });
+    client.set_on_disconnect_callback([]() { std::cout << "[CLIENT] Disconnected from server." << std::endl; });
 
     client.connect("ws://localhost:" + std::to_string(port));
     std::cout << "[CLIENT] Connecting to server..." << std::endl;
@@ -111,10 +109,10 @@ int main() {
     // 6. Client sends a message
     std::cout << "\n[CLIENT] Sending a message..." << std::endl;
     ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
-        .add_param("my_username")
-        .add_param("my_password")
-        .add_param((uint32_t)3)
-        .build();
+                                               .add_param("my_username")
+                                               .add_param("my_password")
+                                               .add_param((uint32_t) 3)
+                                               .build();
     client.send(client_payload);
 
     // 7. Wait for server to receive and client to get response

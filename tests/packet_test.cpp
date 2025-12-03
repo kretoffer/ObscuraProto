@@ -1,8 +1,10 @@
-#include <gtest/gtest.h>
 #include "obscuraproto/packet.hpp"
+
+#include <gtest/gtest.h>
+
+#include <cstdint>
 #include <string>
 #include <vector>
-#include <cstdint>
 
 TEST(PacketTest, PayloadBuilderAndReader) {
     // 1. Build a payload
@@ -13,12 +15,12 @@ TEST(PacketTest, PayloadBuilderAndReader) {
     double score = 99.9;
 
     ObscuraProto::Payload payload = ObscuraProto::PayloadBuilder(0x2001)
-        .add_param(username)
-        .add_param(timestamp)
-        .add_param(data)
-        .add_param(is_admin)
-        .add_param(score)
-        .build();
+                                        .add_param(username)
+                                        .add_param(timestamp)
+                                        .add_param(data)
+                                        .add_param(is_admin)
+                                        .add_param(score)
+                                        .build();
 
     // 2. Serialize and Deserialize
     auto serialized_payload = payload.serialize();

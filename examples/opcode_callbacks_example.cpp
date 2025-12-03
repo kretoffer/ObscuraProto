@@ -1,11 +1,12 @@
-#include "obscuraproto/ws_server.hpp"
-#include "obscuraproto/ws_client.hpp"
-#include "obscuraproto/crypto.hpp"
-#include <iostream>
 #include <chrono>
-#include <thread>
 #include <condition_variable>
+#include <iostream>
 #include <mutex>
+#include <thread>
+
+#include "obscuraproto/crypto.hpp"
+#include "obscuraproto/ws_client.hpp"
+#include "obscuraproto/ws_server.hpp"
 
 // Shared state for synchronization
 std::mutex mtx;
@@ -60,7 +61,8 @@ int main() {
 
     // Set a default handler for anything else
     server.set_default_payload_handler([&](auto hdl, ObscuraProto::Payload payload) {
-        std::cout << "[SERVER] Default handler called for OpCode 0x" << std::hex << payload.op_code << std::dec << std::endl;
+        std::cout << "[SERVER] Default handler called for OpCode 0x" << std::hex << payload.op_code << std::dec
+                  << std::endl;
         {
             std::lock_guard<std::mutex> lock(mtx);
             server_messages_received++;
@@ -82,7 +84,8 @@ int main() {
     });
 
     client.set_default_payload_handler([](ObscuraProto::Payload payload) {
-        std::cout << "[CLIENT] Received message from server (OpCode 0x" << std::hex << payload.op_code << std::dec << ")" << std::endl;
+        std::cout << "[CLIENT] Received message from server (OpCode 0x" << std::hex << payload.op_code << std::dec
+                  << ")" << std::endl;
     });
 
     client.connect("ws://localhost:" + std::to_string(port));

@@ -1,8 +1,8 @@
 #ifndef OBSCURAPROTO_KEYS_HPP
 #define OBSCURAPROTO_KEYS_HPP
 
-#include <vector>
 #include <cstdint>
+#include <vector>
 
 namespace ObscuraProto {
 
@@ -27,6 +27,6 @@ namespace ObscuraProto {
         std::vector<uint8_t> data;
     };
 
-} // namespace ObscuraProto
+}  // namespace ObscuraProto
 
-#endif // OBSCURAPROTO_KEYS_HPP
+#endif  // OBSCURAPROTO_KEYS_HPP

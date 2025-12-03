@@ -1,11 +1,11 @@
+#include <cassert>
 #include <iostream>
 #include <string>
 #include <vector>
-#include <cassert>
 
-#include "obscuraproto/session.hpp"
 #include "obscuraproto/crypto.hpp"
 #include "obscuraproto/packet.hpp"
+#include "obscuraproto/session.hpp"
 
 void print_bytes(const std::string& title, const ObscuraProto::byte_vector& bytes) {
     std::cout << title << " (" << bytes.size() << " bytes): ";
@@ -64,10 +64,10 @@ int main() {
     std::cout << "\n--- Testing Data Transfer (Client to Server) ---" << std::endl;
     uint64_t timestamp = 1678886400000;
     ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
-        .add_param("my_username")
-        .add_param("my_very_secret_password")
-        .add_param(timestamp)
-        .build();
+                                               .add_param("my_username")
+                                               .add_param("my_very_secret_password")
+                                               .add_param(timestamp)
+                                               .build();
 
     std::cout << "[CLIENT] Serialized payload to send:" << std::endl;
     print_bytes("  Payload Data", client_payload.serialize());
@@ -84,7 +84,7 @@ int main() {
         ObscuraProto::Payload decrypted_payload = server_session.decrypt_packet(packet_to_send);
         std::cout << "[SERVER] Message decrypted successfully!" << std::endl;
         assert(decrypted_payload.op_code == client_payload.op_code);
-        
+
         ObscuraProto::PayloadReader reader(decrypted_payload);
         std::string username = reader.read_param<std::string>();
         std::string password = reader.read_param<std::string>();
@@ -102,7 +102,7 @@ int main() {
         std::cerr << "[SERVER] Decryption failed: " << e.what() << std::endl;
         return 1;
     }
-    
+
     std::cout << "\n--- Protocol simulation successful!---" << std::endl;
 
     return 0;

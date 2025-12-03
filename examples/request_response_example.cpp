@@ -1,10 +1,11 @@
-#include "obscuraproto/ws_server.hpp"
-#include "obscuraproto/ws_client.hpp"
-#include "obscuraproto/crypto.hpp"
-#include <iostream>
 #include <chrono>
-#include <thread>
 #include <future>
+#include <iostream>
+#include <thread>
+
+#include "obscuraproto/crypto.hpp"
+#include "obscuraproto/ws_client.hpp"
+#include "obscuraproto/ws_server.hpp"
 
 // This example demonstrates the BI-DIRECTIONAL request-response pattern using the simplified API.
 // 1. The client connects and sends a request to the server.
@@ -39,9 +40,8 @@ int main() {
     ObscuraProto::net::WsServerWrapper server(server_long_term_key);
 
     // Register a handler for the client's echo request using the new simplified API
-    server.register_request_handler(OP_C2S_ECHO_REQUEST, 
-        [&](auto hdl, ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
-            
+    server.register_request_handler(
+        OP_C2S_ECHO_REQUEST, [&](auto hdl, ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
             std::cout << "[SERVER] Received client's echo request." << std::endl;
             std::string message = reader.read_param<std::string>();
 
@@ -52,12 +52,13 @@ int main() {
                 ObscuraProto::Payload time_request = ObscuraProto::PayloadBuilder(OP_S2C_TIME_REQUEST).build();
                 auto server_future = server.async_request(hdl, time_request);
 
-                if(server_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready) {
+                if (server_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready) {
                     try {
                         auto client_response = server_future.get();
                         if (client_response.op_code == OP_S2C_TIME_RESPONSE) {
                             ObscuraProto::PayloadReader reader(client_response);
-                            std::cout << "[SERVER] Received response from client: " << reader.read_param<std::string>() << std::endl;
+                            std::cout << "[SERVER] Received response from client: " << reader.read_param<std::string>()
+                                      << std::endl;
                         }
                     } catch (const std::exception& e) {
                         std::cerr << "[SERVER] Exception getting client response: " << e.what() << std::endl;
@@ -66,15 +67,12 @@ int main() {
                     std::cerr << "[SERVER] Timed out waiting for client response." << std::endl;
                 }
                 done_promise->set_value();
-            }).detach(); // Detach the thread to let it run independently.
+            }).detach();  // Detach the thread to let it run independently.
 
             // Simply return the response payload. The library handles sending it.
             std::cout << "[SERVER] Sent response to client." << std::endl;
-            return ObscuraProto::PayloadBuilder(OP_C2S_ECHO_RESPONSE)
-                .add_param("Echoing back: " + message)
-                .build();
-        }
-    );
+            return ObscuraProto::PayloadBuilder(OP_C2S_ECHO_RESPONSE).add_param("Echoing back: " + message).build();
+        });
 
     server.run(port);
     std::cout << "[SERVER] Started on port " << port << std::endl;
@@ -82,7 +80,7 @@ int main() {
 
     // 4. Start Client
     ObscuraProto::net::WsClientWrapper client(client_view_of_server_key);
-    
+
     std::promise<void> ready_promise;
     std::future<void> ready_future = ready_promise.get_future();
 
@@ -92,21 +90,18 @@ int main() {
     });
 
     // Register a handler for the server's time request using the new simplified API
-    client.register_request_handler(OP_S2C_TIME_REQUEST, 
-        [&](ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
+    client.register_request_handler(
+        OP_S2C_TIME_REQUEST, [&](ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
             std::cout << "[CLIENT] Received time request from server." << std::endl;
-            
+
             auto now = std::chrono::system_clock::now();
             auto time_t = std::chrono::system_clock::to_time_t(now);
             std::string time_str = std::ctime(&time_t);
-            time_str.pop_back(); // remove newline
+            time_str.pop_back();  // remove newline
 
             std::cout << "[CLIENT] Sending time response to server..." << std::endl;
-            return ObscuraProto::PayloadBuilder(OP_S2C_TIME_RESPONSE)
-                .add_param("The time is: " + time_str)
-                .build();
-        }
-    );
+            return ObscuraProto::PayloadBuilder(OP_S2C_TIME_RESPONSE).add_param("The time is: " + time_str).build();
+        });
 
     client.connect("ws://localhost:" + std::to_string(port));
     std::cout << "[CLIENT] Connecting to server..." << std::endl;
@@ -120,10 +115,9 @@ int main() {
 
     // 6. Client sends a request and waits for the response
     std::cout << "\n[CLIENT] Sending an echo request..." << std::endl;
-    ObscuraProto::Payload request_payload = ObscuraProto::PayloadBuilder(OP_C2S_ECHO_REQUEST)
-        .add_param("Hello, world!")
-        .build();
-    
+    ObscuraProto::Payload request_payload =
+        ObscuraProto::PayloadBuilder(OP_C2S_ECHO_REQUEST).add_param("Hello, world!").build();
+
     auto response_future = client.async_request(request_payload);
 
     std::cout << "[CLIENT] Waiting for response from server..." << std::endl;
@@ -144,7 +138,7 @@ int main() {
 
     // 7. Wait for server to finish its flow
     std::cout << "\n[SYSTEM] Waiting for server to finish its request to the client..." << std::endl;
-    if(server_request_done_future.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
+    if (server_request_done_future.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
         std::cerr << "[SYSTEM] Timed out waiting for server flow to complete." << std::endl;
     }
 

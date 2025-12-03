@@ -1,10 +1,12 @@
-#include <gtest/gtest.h>
-#include "obscuraproto/session.hpp"
 #include "obscuraproto/crypto.hpp"
-#include "obscuraproto/packet.hpp"
+
+#include <gtest/gtest.h>
 
 #include <string>
 #include <vector>
+
+#include "obscuraproto/packet.hpp"
+#include "obscuraproto/session.hpp"
 
 TEST(SessionTest, HandshakeAndEncryptDecrypt) {
     // 1. Initialize the crypto library
@@ -29,19 +31,17 @@ TEST(SessionTest, HandshakeAndEncryptDecrypt) {
     // 4. Data Transfer: Client -> Server
     uint64_t timestamp = 1678886400000;
     ObscuraProto::Payload client_payload = ObscuraProto::PayloadBuilder(0x1001)
-        .add_param("my_username")
-        .add_param("my_very_secret_password")
-        .add_param(timestamp)
-        .build();
+                                               .add_param("my_username")
+                                               .add_param("my_very_secret_password")
+                                               .add_param(timestamp)
+                                               .build();
 
     // 5. Encrypt on client
     ObscuraProto::EncryptedPacket packet_to_send = client_session.encrypt_payload(client_payload);
 
     // 6. Decrypt on server
     ObscuraProto::Payload decrypted_payload;
-    ASSERT_NO_THROW({
-        decrypted_payload = server_session.decrypt_packet(packet_to_send);
-    });
+    ASSERT_NO_THROW({ decrypted_payload = server_session.decrypt_packet(packet_to_send); });
 
     // 7. Verify decrypted data
     ASSERT_EQ(decrypted_payload.op_code, client_payload.op_code);
@@ -82,7 +82,7 @@ TEST(SessionTest, DecryptionFailure) {
     ASSERT_THROW(server_session_2.decrypt_packet(packet_to_send), ObscuraProto::LogicError);
 
     // 5. Corrupt the packet and try to decrypt
-    packet_to_send[packet_to_send.size() - 1] ^= 0xFF; // Flip some bits in the tag
+    packet_to_send[packet_to_send.size() - 1] ^= 0xFF;  // Flip some bits in the tag
     ASSERT_THROW(server_session.decrypt_packet(packet_to_send), ObscuraProto::RuntimeError);
 }
 
@@ -95,7 +95,7 @@ TEST(SessionTest, HandshakeFailure) {
     auto wrong_server_long_term_key = ObscuraProto::Crypto::generate_sign_keypair();
 
     ObscuraProto::KeyPair client_view_of_server_key;
-    client_view_of_server_key.publicKey = wrong_server_long_term_key.publicKey; // Client has the wrong key
+    client_view_of_server_key.publicKey = wrong_server_long_term_key.publicKey;  // Client has the wrong key
 
     ObscuraProto::Session server_session(ObscuraProto::Role::SERVER, server_long_term_key);
     ObscuraProto::Session client_session(ObscuraProto::Role::CLIENT, client_view_of_server_key);

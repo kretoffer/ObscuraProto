@@ -1,19 +1,16 @@
 #ifndef OBSCURAPROTO_SESSION_HPP
 #define OBSCURAPROTO_SESSION_HPP
 
+#include <memory>
+
 #include "crypto.hpp"
+#include "handshake_messages.hpp"
 #include "packet.hpp"
 #include "version.hpp"
-#include "handshake_messages.hpp"
-
-#include <memory>
 
 namespace ObscuraProto {
 
-    enum class Role {
-        CLIENT,
-        SERVER
-    };
+    enum class Role { CLIENT, SERVER };
 
     /**
      * @brief Manages the state and logic for a single ObscuraProto session.
@@ -50,7 +47,6 @@ namespace ObscuraProto {
          * @throws ObscuraProto::RuntimeError if the server's signature is invalid or keys can't be computed.
          */
         void client_finalize_handshake(const ServerHello& server_hello);
-
 
         // --- Data Transfer Methods ---
 
@@ -93,6 +89,6 @@ namespace ObscuraProto {
         uint64_t recv_counter_ = 0;
     };
 
-} // namespace ObscuraProto
+}  // namespace ObscuraProto
 
-#endif // OBSCURAPROTO_SESSION_HPP
+#endif  // OBSCURAPROTO_SESSION_HPP
