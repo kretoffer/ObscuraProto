@@ -48,3 +48,37 @@ TEST(PacketTest, PayloadBuilderAndReader) {
     // 5. Check for end of params
     ASSERT_FALSE(reader.has_more());
 }
+
+TEST(PacketTest, PeekNextParamSize) {
+    // 1. Build a payload
+    uint32_t an_integer = 0xDEADBEEF;
+    std::string a_string = "hello world";
+    bool a_bool = true;
+
+    ObscuraProto::Payload payload =
+        ObscuraProto::PayloadBuilder(0x2002).add_param(an_integer).add_param(a_string).add_param(a_bool).build();
+
+    ObscuraProto::PayloadReader reader(payload);
+
+    // 2. Peek and read first param
+    ASSERT_TRUE(reader.has_more());
+    ASSERT_EQ(reader.peek_next_param_size(), sizeof(uint32_t));
+    auto read_integer = reader.read_param<uint32_t>();
+    ASSERT_EQ(read_integer, an_integer);
+
+    // 3. Peek and read second param
+    ASSERT_TRUE(reader.has_more());
+    ASSERT_EQ(reader.peek_next_param_size(), a_string.length());
+    auto read_string = reader.read_param<std::string>();
+    ASSERT_EQ(read_string, a_string);
+
+    // 4. Peek and read third param
+    ASSERT_TRUE(reader.has_more());
+    ASSERT_EQ(reader.peek_next_param_size(), sizeof(uint8_t));  // bool is stored as uint8_t
+    auto read_bool = reader.read_param<bool>();
+    ASSERT_EQ(read_bool, a_bool);
+
+    // 5. Check for end of params
+    ASSERT_FALSE(reader.has_more());
+    ASSERT_THROW(reader.peek_next_param_size(), ObscuraProto::RuntimeError);
+}

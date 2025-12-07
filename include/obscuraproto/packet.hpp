@@ -115,6 +115,13 @@ namespace ObscuraProto {
 
         bool has_more() const;
 
+        /**
+         * @brief Peeks at the size of the next parameter without consuming it.
+         * @return The size of the next parameter in bytes.
+         * @throws ObscuraProto::RuntimeError if there is not enough data to read the size.
+         */
+        size_t peek_next_param_size() const;
+
     private:
         byte_vector read_param_bytes();
         const byte_vector& params_data_;

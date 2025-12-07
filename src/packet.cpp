@@ -159,6 +159,18 @@ namespace ObscuraProto {
         return offset_ < params_data_.size();
     }
 
+    size_t PayloadReader::peek_next_param_size() const {
+        if (offset_ + sizeof(uint16_t) > params_data_.size()) {
+            throw RuntimeError("Invalid payload data: not enough data to read parameter length.");
+        }
+
+        uint16_t be_len;
+        std::copy(params_data_.begin() + offset_,
+                  params_data_.begin() + offset_ + sizeof(uint16_t),
+                  reinterpret_cast<uint8_t*>(&be_len));
+        return ntohs(be_len);
+    }
+
     byte_vector PayloadReader::read_param_bytes() {
         if (offset_ + sizeof(uint16_t) > params_data_.size()) {
             throw RuntimeError("Invalid payload data: not enough data for parameter length.");
