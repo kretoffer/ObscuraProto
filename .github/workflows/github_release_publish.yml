@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.1
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        build_type: [Release]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake
+
+      - name: Install dependencies (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          # Xcode command line tools are pre-installed
+          brew install cmake
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+
+      - name: Build project
+        run: cmake --build build --config ${{ matrix.build_type }}
+
+      - name: Install project
+        run: cmake --install build --prefix install_dir --config ${{ matrix.build_type }}
+
+      - name: Archive production artifacts (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: tar -czf obscuraproto-linux.tar.gz -C install_dir .
+        shell: bash
+
+      - name: Archive production artifacts (Windows)
+        if: startsWith(matrix.os, 'windows')
+        run: Compress-Archive -Path install_dir\* -DestinationPath obscuraproto-windows.zip
+        shell: pwsh
+
+      - name: Archive production artifacts (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: tar -czf obscuraproto-macos.tar.gz -C install_dir .
+        shell: bash
+
+      - name: Upload artifact (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        uses: actions/upload-artifact@v3
+        with:
+          name: obscuraproto-linux
+          path: obscuraproto-linux.tar.gz
+
+      - name: Upload artifact (Windows)
+        if: startsWith(matrix.os, 'windows')
+        uses: actions/upload-artifact@v3
+        with:
+          name: obscuraproto-windows
+          path: obscuraproto-windows.zip
+
+      - name: Upload artifact (macOS)
+        if: startsWith(matrix.os, 'macos')
+        uses: actions/upload-artifact@v3
+        with:
+          name: obscuraproto-macos
+          path: obscuraproto-macos.tar.gz
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # To create a release
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Changelog content
+        id: changelog
+        run: echo "changelog_body=$(cat CHANGELOG.md)" >> $GITHUB_OUTPUT
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref }}
+          name: Release ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.changelog_body }}
+          files: artifacts/*/* # This should correctly pick up all zips/tars inside the downloaded artifact folders.
