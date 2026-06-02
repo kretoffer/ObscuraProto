@@ -284,5 +284,11 @@ namespace ObscuraProto {
             }
         }
 
+        Payload WsClientWrapper::sync_request(const Payload& payload) {
+            auto future_result = this->async_request(payload);
+            Payload result = future_result.get();
+            return result;
+        }
+
     }  // namespace net
 }  // namespace ObscuraProto

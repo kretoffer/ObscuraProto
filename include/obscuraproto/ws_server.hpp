@@ -43,6 +43,14 @@ namespace ObscuraProto {
             std::future<Payload> async_request(WsConnectionHdl hdl, const Payload& payload);
 
             /**
+             * @brief Sends a request to a client and returns a response.
+             * @param hdl The connection handle of the client.
+             * @param payload The payload to send as a request.
+             * @return A response payload.
+             */
+            Payload sync_request(WsConnectionHdl hdl, const Payload& payload);
+
+            /**
              * @brief Registers a handler for a specific operation code.
              * @param op_code The operation code to handle.
              * @param callback The function to call when a payload with this op_code is received.

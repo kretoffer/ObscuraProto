@@ -36,6 +36,13 @@ namespace ObscuraProto {
             std::future<Payload> async_request(const Payload& payload);
 
             /**
+             * @brief Sends a payload and returns a response.
+             * @param payload The payload to send. The op_code should indicate a request.
+             * @return A response payload.
+             */
+            Payload sync_request(const Payload& payload);
+
+            /**
              * @brief Sends a response to a specific server-initiated request.
              * @param request_id The ID of the request being responded to.
              * @param payload The response payload.
