@@ -271,7 +271,7 @@ This pattern uses a special internal operation code (`0xFFFF`) for responses and
 
 #### Initiating a Request
 
-Both `WsClientWrapper` and `WsServerWrapper` have an `async_request` method. It sends a request and returns a `std::future` that will be fulfilled with the response.
+Both `WsClientWrapper` and `WsServerWrapper` have an `async_request` method. It sends a request and returns a `std::future` that will be fulfilled with the response. There is also a `sync_request` method available for synchronous request-response interactions.
 
 ```cpp
 // Client-side example
@@ -409,6 +409,94 @@ client.connect("ws://localhost:9002");
 client.disconnect();
 server.stop();
 ```
+
+## 7. Bidirectional Streaming
+
+To support real-time applications like voice/video calls or AI responses, ObscuraProto includes a high-performance, bidirectional streaming system. It operates over the same secure channel, allowing simultaneous streaming and request-response messaging or packet sending.
+
+*   **Encrypted & Concurrent:** All stream data is automatically encrypted and authenticated using the established session keys. The system is designed to not block other communication.
+*   **Bidirectional:** Both the client and server can initiate streams to the other party. For a call, each side would start its own outgoing stream.
+*   **High-Throughput:** Data is sent in efficient chunks. The underlying WebSocket ensures ordered and reliable delivery, minimizing overhead.
+
+### 7.1. Stream Lifecycle and Payload Structure
+
+A stream is managed by a unique `stream_id` and a set of special operation codes. The actual stream data (e.g., a video frame) is sent as a parameter within a `STREAM_DATA` payload.
+
+*   `stream_id`: A `uint32_t` that identifies a specific stream.
+*   `sequence_number`: A `uint64_t` that indicates the order of data chunks within a stream.
+
+The payload for a `STREAM_DATA` message looks like this before encryption:
+`[OpCode (2)] + [stream_id (4)] + [sequence_number (8)] + [data_chunk (N)]`
+
+
+### 7.3. Streaming API Usage Example
+
+The API is designed around two main concepts: `register_incoming_stream_handler` to receive new streams and `start_stream` to initiate one.
+
+#### Server-side: Accepting an incoming stream
+
+The server registers a handler that will be invoked when a client starts a new stream.
+
+```cpp
+// Server-side
+server.register_incoming_stream_handler(
+    [&server](std::shared_ptr<ObscuraProto::net::IncomingStream> stream) {
+        std::cout << "[SERVER] New incoming stream #" << stream->get_stream_id() << std::endl;
+
+        // Set a handler for incoming data chunks
+        stream->set_data_handler([](const ObscuraProto::byte_vector& data) {
+            std::cout << "[SERVER] Received " << data.size() << " bytes for stream." << std::endl;
+            // Process the video/audio chunk...
+        });
+
+        // Set a handler for the end of the stream
+        stream->set_end_handler([&server, stream]() {
+            std::cout << "[SERVER] Stream #" << stream->get_stream_id() << " ended." << std::endl;
+        });
+
+        // Set a handler for stream cancellation
+        stream->set_cancel_handler([stream]() {
+            std::cout << "[SERVER] Stream #" << stream->get_stream_id() << " was canceled." << std::endl;
+        });
+    }
+);
+```
+
+#### Client-side: Initiating a stream and sending data
+
+The client calls `start_stream` to get an `OutgoingStream` object and then uses it to send data.
+
+```cpp
+// Client-side, after connection is ready (in on_ready_callback)
+auto outgoing_stream = client.start_stream();
+std::cout << "[CLIENT] Started outgoing stream #" << outgoing_stream->get_stream_id() << std::endl;
+
+// Simulate sending video frames every 100ms
+for (int i = 0; i < 5; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ObscuraProto::byte_vector video_chunk = {'f','a','k','e','_','d','a','t','a'};
+    std::cout << "[CLIENT] Sending chunk " << i << " for stream #" << outgoing_stream->get_stream_id() << std::endl;
+    outgoing_stream->write(video_chunk);
+}
+
+// Signal that we are done sending data
+std::cout << "[CLIENT] Ending stream #" << outgoing_stream->get_stream_id() << std::endl;
+outgoing_stream->end();
+```
+
+
+### 7.2. System Operation Codes
+
+The following `OpCode`s are reserved for the internal mechanics of the ObscuraProto library. You should **not** use them for your own application logic.
+
+| OpCode (Hex)    | Name                  | Description                                                 |
+| --------------- | --------------------- | ----------------------------------------------------------- |
+| `0xFFFF`        | `RESPONSE`            | Internal code for handling responses to `async_request`.    |
+| `0xFFFD`        | `STREAM_START`        | Initiates a new data stream.                                |
+| `0xFFFC`        | `STREAM_DATA`         | A chunk of data belonging to an existing stream.            |
+| `0xFFFB`        | `STREAM_END`          | Signals that the sender has finished writing to the stream. |
+| `0xFFFA`        | `STREAM_CANCEL`       | Immediately terminates a stream from either side.           |
+
 
 ### Dependencies
 
