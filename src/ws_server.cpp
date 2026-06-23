@@ -121,9 +121,7 @@ namespace ObscuraProto {
             uint32_t stream_id = next_outgoing_stream_id_ * 2 + 1;
             next_outgoing_stream_id_++;
 
-            auto stream = std::make_shared<Stream>(stream_id, [this, hdl](const Payload& p) {
-                send(hdl, p);
-            });
+            auto stream = std::make_shared<Stream>(stream_id, [this, hdl](const Payload& p) { send(hdl, p); });
 
             {
                 std::lock_guard<std::mutex> lock(streams_mutex_);
@@ -137,8 +135,7 @@ namespace ObscuraProto {
             return stream;
         }
 
-        void WsServerWrapper::register_incoming_stream_handler(
-            std::function<void(std::shared_ptr<Stream>)> callback) {
+        void WsServerWrapper::register_incoming_stream_handler(std::function<void(std::shared_ptr<Stream>)> callback) {
             incoming_stream_handler_ = std::move(callback);
         }
 
@@ -231,19 +228,15 @@ namespace ObscuraProto {
                                           << std::endl;
                             }
                         }
-                    } else if (payload.op_code == OpCode::STREAM_START ||
-                               payload.op_code == OpCode::STREAM_DATA ||
-                               payload.op_code == OpCode::STREAM_END ||
-                               payload.op_code == OpCode::STREAM_CANCEL) {
-
+                    } else if (payload.op_code == OpCode::STREAM_START || payload.op_code == OpCode::STREAM_DATA ||
+                               payload.op_code == OpCode::STREAM_END || payload.op_code == OpCode::STREAM_CANCEL) {
                         PayloadReader reader(payload);
                         uint32_t stream_id = reader.read_param<uint32_t>();
 
                         switch (payload.op_code) {
                             case OpCode::STREAM_START: {
-                                auto stream = std::make_shared<Stream>(stream_id, [this, hdl](const Payload& p) {
-                                    send(hdl, p);
-                                });
+                                auto stream = std::make_shared<Stream>(stream_id,
+                                                                       [this, hdl](const Payload& p) { send(hdl, p); });
                                 {
                                     std::lock_guard<std::mutex> lock(streams_mutex_);
                                     per_connection_streams_[hdl][stream_id] = stream;

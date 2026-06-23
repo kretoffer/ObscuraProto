@@ -140,10 +140,10 @@ namespace ObscuraProto {
     }
 
     namespace OpCode {
-        constexpr Payload::OpCode RESPONSE      = 0xFFFF;
-        constexpr Payload::OpCode STREAM_START  = 0xFFFD;
-        constexpr Payload::OpCode STREAM_DATA   = 0xFFFC;
-        constexpr Payload::OpCode STREAM_END    = 0xFFFB;
+        constexpr Payload::OpCode RESPONSE = 0xFFFF;
+        constexpr Payload::OpCode STREAM_START = 0xFFFD;
+        constexpr Payload::OpCode STREAM_DATA = 0xFFFC;
+        constexpr Payload::OpCode STREAM_END = 0xFFFB;
         constexpr Payload::OpCode STREAM_CANCEL = 0xFFFA;
     }
 

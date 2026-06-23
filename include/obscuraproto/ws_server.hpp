@@ -113,7 +113,8 @@ namespace ObscuraProto {
 
             // For streaming
             std::mutex streams_mutex_;
-            std::map<WsConnectionHdl, std::map<uint32_t, std::shared_ptr<Stream>>, std::owner_less<WsConnectionHdl>> per_connection_streams_;
+            std::map<WsConnectionHdl, std::map<uint32_t, std::shared_ptr<Stream>>, std::owner_less<WsConnectionHdl>>
+                per_connection_streams_;
             std::function<void(std::shared_ptr<Stream>)> incoming_stream_handler_;
             uint32_t next_outgoing_stream_id_ = 0;
         };

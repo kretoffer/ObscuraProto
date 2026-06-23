@@ -28,30 +28,28 @@ int main() {
     // ---- Server ----
     ObscuraProto::net::WsServerWrapper server(server_long_term_key);
 
-    server.register_incoming_stream_handler(
-        [](std::shared_ptr<ObscuraProto::Stream> stream) {
-            std::cout << "[SERVER] New incoming stream #" << stream->get_stream_id() << std::endl;
+    server.register_incoming_stream_handler([](std::shared_ptr<ObscuraProto::Stream> stream) {
+        std::cout << "[SERVER] New incoming stream #" << stream->get_stream_id() << std::endl;
 
-            stream->set_data_handler([stream](const ObscuraProto::byte_vector& data) {
-                std::string msg(data.begin(), data.end());
-                std::cout << "[SERVER] Received: \"" << msg << "\"" << std::endl;
+        stream->set_data_handler([stream](const ObscuraProto::byte_vector& data) {
+            std::string msg(data.begin(), data.end());
+            std::cout << "[SERVER] Received: \"" << msg << "\"" << std::endl;
 
-                // Echo back via the same bidirectional stream
-                ObscuraProto::byte_vector response = {'E', 'c', 'h', 'o', ':', ' '};
-                response.insert(response.end(), data.begin(), data.end());
-                stream->write(response);
-            });
-
-            stream->set_end_handler([stream]() {
-                std::cout << "[SERVER] Client finished writing to stream #"
-                          << stream->get_stream_id() << std::endl;
-                stream->end();
-            });
-
-            stream->set_cancel_handler([stream]() {
-                std::cout << "[SERVER] Stream #" << stream->get_stream_id() << " was canceled." << std::endl;
-            });
+            // Echo back via the same bidirectional stream
+            ObscuraProto::byte_vector response = {'E', 'c', 'h', 'o', ':', ' '};
+            response.insert(response.end(), data.begin(), data.end());
+            stream->write(response);
         });
+
+        stream->set_end_handler([stream]() {
+            std::cout << "[SERVER] Client finished writing to stream #" << stream->get_stream_id() << std::endl;
+            stream->end();
+        });
+
+        stream->set_cancel_handler([stream]() {
+            std::cout << "[SERVER] Stream #" << stream->get_stream_id() << " was canceled." << std::endl;
+        });
+    });
 
     server.run(port);
     std::cout << "[SERVER] Started on port " << port << std::endl;
@@ -77,8 +75,7 @@ int main() {
         });
 
         stream->set_end_handler([stream]() {
-            std::cout << "[CLIENT] Server finished writing to stream #"
-                      << stream->get_stream_id() << std::endl;
+            std::cout << "[CLIENT] Server finished writing to stream #" << stream->get_stream_id() << std::endl;
         });
 
         // Send some data
