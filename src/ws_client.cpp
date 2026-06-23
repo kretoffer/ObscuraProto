@@ -8,8 +8,6 @@
 namespace ObscuraProto {
     namespace net {
 
-        constexpr uint16_t RESPONSE_OP_CODE = 0xFFFF;
-
         WsClientWrapper::WsClientWrapper(KeyPair server_sign_key) {
             session_ = std::make_unique<Session>(Role::CLIENT, std::move(server_sign_key));
             client_.init_asio();
@@ -130,11 +128,35 @@ namespace ObscuraProto {
         }
 
         void WsClientWrapper::send_response(uint32_t request_id, const Payload& payload) {
-            PayloadBuilder response_builder(RESPONSE_OP_CODE);
+            PayloadBuilder response_builder(OpCode::RESPONSE);
             response_builder.add_param(request_id);
             response_builder.add_param(payload.serialize());
 
             send(response_builder.build());
+        }
+
+        std::shared_ptr<Stream> WsClientWrapper::start_stream() {
+            uint32_t stream_id = next_outgoing_stream_id_++ * 2;
+
+            auto stream = std::make_shared<Stream>(stream_id, [this](const Payload& p) {
+                send(p);
+            });
+
+            {
+                std::lock_guard<std::mutex> lock(streams_mutex_);
+                active_streams_[stream_id] = stream;
+            }
+
+            PayloadBuilder builder(OpCode::STREAM_START);
+            builder.add_param(stream_id);
+            send(builder.build());
+
+            return stream;
+        }
+
+        void WsClientWrapper::register_incoming_stream_handler(
+            std::function<void(std::shared_ptr<Stream>)> callback) {
+            incoming_stream_handler_ = std::move(callback);
         }
 
         void WsClientWrapper::set_on_ready_callback(OnReadyCallback callback) {
@@ -214,7 +236,7 @@ namespace ObscuraProto {
                     byte_vector packet(msg->get_payload().begin(), msg->get_payload().end());
                     Payload payload = session_->decrypt_packet(packet);
 
-                    if (payload.op_code == RESPONSE_OP_CODE) {
+                    if (payload.op_code == OpCode::RESPONSE) {
                         // This is a response to a request
                         PayloadReader reader(payload);
                         uint32_t request_id = reader.read_param<uint32_t>();
@@ -231,6 +253,56 @@ namespace ObscuraProto {
                                 std::cerr
                                     << "Received response for unknown or already handled request ID: " << request_id
                                     << std::endl;
+                            }
+                        }
+
+                    } else if (payload.op_code == OpCode::STREAM_START ||
+                               payload.op_code == OpCode::STREAM_DATA ||
+                               payload.op_code == OpCode::STREAM_END ||
+                               payload.op_code == OpCode::STREAM_CANCEL) {
+
+                        PayloadReader reader(payload);
+                        uint32_t stream_id = reader.read_param<uint32_t>();
+
+                        switch (payload.op_code) {
+                            case OpCode::STREAM_START: {
+                                auto stream = std::make_shared<Stream>(stream_id, [this](const Payload& p) {
+                                    send(p);
+                                });
+                                {
+                                    std::lock_guard<std::mutex> lock(streams_mutex_);
+                                    active_streams_[stream_id] = stream;
+                                }
+                                if (incoming_stream_handler_) {
+                                    incoming_stream_handler_(std::move(stream));
+                                }
+                                break;
+                            }
+                            case OpCode::STREAM_DATA: {
+                                byte_vector data = reader.read_param<byte_vector>();
+                                std::lock_guard<std::mutex> lock(streams_mutex_);
+                                auto it = active_streams_.find(stream_id);
+                                if (it != active_streams_.end()) {
+                                    it->second->dispatch_data(std::move(data));
+                                }
+                                break;
+                            }
+                            case OpCode::STREAM_END: {
+                                std::lock_guard<std::mutex> lock(streams_mutex_);
+                                auto it = active_streams_.find(stream_id);
+                                if (it != active_streams_.end()) {
+                                    it->second->dispatch_end();
+                                }
+                                break;
+                            }
+                            case OpCode::STREAM_CANCEL: {
+                                std::lock_guard<std::mutex> lock(streams_mutex_);
+                                auto it = active_streams_.find(stream_id);
+                                if (it != active_streams_.end()) {
+                                    it->second->dispatch_cancel();
+                                    active_streams_.erase(it);
+                                }
+                                break;
                             }
                         }
 

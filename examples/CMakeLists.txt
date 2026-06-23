@@ -31,3 +31,11 @@ target_link_libraries(opcode_callbacks_example
     PRIVATE
         obscuraproto
 )
+
+# Add the streaming example
+add_executable(streaming_example streaming_example.cpp)
+
+target_link_libraries(streaming_example
+    PRIVATE
+        obscuraproto
+)

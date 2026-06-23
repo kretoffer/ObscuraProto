@@ -8,8 +8,6 @@
 namespace ObscuraProto {
     namespace net {
 
-        constexpr uint16_t RESPONSE_OP_CODE = 0xFFFF;
-
         WsServerWrapper::WsServerWrapper(KeyPair server_sign_key) : server_sign_key_(std::move(server_sign_key)) {
             server_.init_asio();
             server_.set_open_handler(std::bind(&WsServerWrapper::on_open, this, std::placeholders::_1));
@@ -79,7 +77,7 @@ namespace ObscuraProto {
         }
 
         void WsServerWrapper::send_response(WsConnectionHdl hdl, uint32_t request_id, const Payload& payload) {
-            PayloadBuilder response_builder(RESPONSE_OP_CODE);
+            PayloadBuilder response_builder(OpCode::RESPONSE);
             response_builder.add_param(request_id);
             response_builder.add_param(payload.serialize());
 
@@ -119,6 +117,31 @@ namespace ObscuraProto {
             return future;
         }
 
+        std::shared_ptr<Stream> WsServerWrapper::start_stream(WsConnectionHdl hdl) {
+            uint32_t stream_id = next_outgoing_stream_id_ * 2 + 1;
+            next_outgoing_stream_id_++;
+
+            auto stream = std::make_shared<Stream>(stream_id, [this, hdl](const Payload& p) {
+                send(hdl, p);
+            });
+
+            {
+                std::lock_guard<std::mutex> lock(streams_mutex_);
+                per_connection_streams_[hdl][stream_id] = stream;
+            }
+
+            PayloadBuilder builder(OpCode::STREAM_START);
+            builder.add_param(stream_id);
+            send(hdl, builder.build());
+
+            return stream;
+        }
+
+        void WsServerWrapper::register_incoming_stream_handler(
+            std::function<void(std::shared_ptr<Stream>)> callback) {
+            incoming_stream_handler_ = std::move(callback);
+        }
+
         void WsServerWrapper::register_op_handler(Payload::OpCode op_code, OnPayloadCallback callback) {
             std::lock_guard<std::mutex> lock(op_handlers_mutex_);
             op_code_handlers_[op_code] = std::move(callback);
@@ -145,6 +168,12 @@ namespace ObscuraProto {
 
         void WsServerWrapper::on_close(WsConnectionHdl hdl) {
             sessions_.erase(hdl);
+
+            {
+                std::lock_guard<std::mutex> lock(streams_mutex_);
+                per_connection_streams_.erase(hdl);
+            }
+
             // Note: We don't clean up pending requests for this specific connection here,
             // as it would require iterating the map. They will be fulfilled with an
             // exception when the server stops, or will eventually time out (if timeouts are implemented).
@@ -184,7 +213,7 @@ namespace ObscuraProto {
                     byte_vector packet(msg->get_payload().begin(), msg->get_payload().end());
                     Payload payload = session.decrypt_packet(packet);
 
-                    if (payload.op_code == RESPONSE_OP_CODE) {
+                    if (payload.op_code == OpCode::RESPONSE) {
                         // This is a response from a client to a server-initiated request
                         PayloadReader reader(payload);
                         uint32_t request_id = reader.read_param<uint32_t>();
@@ -202,6 +231,65 @@ namespace ObscuraProto {
                                           << std::endl;
                             }
                         }
+                    } else if (payload.op_code == OpCode::STREAM_START ||
+                               payload.op_code == OpCode::STREAM_DATA ||
+                               payload.op_code == OpCode::STREAM_END ||
+                               payload.op_code == OpCode::STREAM_CANCEL) {
+
+                        PayloadReader reader(payload);
+                        uint32_t stream_id = reader.read_param<uint32_t>();
+
+                        switch (payload.op_code) {
+                            case OpCode::STREAM_START: {
+                                auto stream = std::make_shared<Stream>(stream_id, [this, hdl](const Payload& p) {
+                                    send(hdl, p);
+                                });
+                                {
+                                    std::lock_guard<std::mutex> lock(streams_mutex_);
+                                    per_connection_streams_[hdl][stream_id] = stream;
+                                }
+                                if (incoming_stream_handler_) {
+                                    incoming_stream_handler_(std::move(stream));
+                                }
+                                break;
+                            }
+                            case OpCode::STREAM_DATA: {
+                                byte_vector data = reader.read_param<byte_vector>();
+                                std::lock_guard<std::mutex> lock(streams_mutex_);
+                                auto conn_it = per_connection_streams_.find(hdl);
+                                if (conn_it != per_connection_streams_.end()) {
+                                    auto str_it = conn_it->second.find(stream_id);
+                                    if (str_it != conn_it->second.end()) {
+                                        str_it->second->dispatch_data(std::move(data));
+                                    }
+                                }
+                                break;
+                            }
+                            case OpCode::STREAM_END: {
+                                std::lock_guard<std::mutex> lock(streams_mutex_);
+                                auto conn_it = per_connection_streams_.find(hdl);
+                                if (conn_it != per_connection_streams_.end()) {
+                                    auto str_it = conn_it->second.find(stream_id);
+                                    if (str_it != conn_it->second.end()) {
+                                        str_it->second->dispatch_end();
+                                    }
+                                }
+                                break;
+                            }
+                            case OpCode::STREAM_CANCEL: {
+                                std::lock_guard<std::mutex> lock(streams_mutex_);
+                                auto conn_it = per_connection_streams_.find(hdl);
+                                if (conn_it != per_connection_streams_.end()) {
+                                    auto str_it = conn_it->second.find(stream_id);
+                                    if (str_it != conn_it->second.end()) {
+                                        str_it->second->dispatch_cancel();
+                                        conn_it->second.erase(str_it);
+                                    }
+                                }
+                                break;
+                            }
+                        }
+
                     } else {
                         // This is a regular message or a request from the client
                         bool handled = false;

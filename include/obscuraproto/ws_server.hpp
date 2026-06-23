@@ -9,6 +9,7 @@
 #include <thread>
 
 #include "session.hpp"
+#include "stream.hpp"
 #include "ws_common.hpp"
 
 namespace ObscuraProto {
@@ -76,6 +77,19 @@ namespace ObscuraProto {
              */
             void set_on_payload_callback(OnPayloadCallback callback);
 
+            /**
+             * @brief Starts a new outgoing stream to a specific client.
+             * @param hdl The connection handle of the client.
+             * @return A shared pointer to the new Stream object.
+             */
+            std::shared_ptr<Stream> start_stream(WsConnectionHdl hdl);
+
+            /**
+             * @brief Registers a handler for incoming streams initiated by a client.
+             * @param callback The function to call when a new stream is received.
+             */
+            void register_incoming_stream_handler(std::function<void(std::shared_ptr<Stream>)> callback);
+
         private:
             void on_open(WsConnectionHdl hdl);
             void on_close(WsConnectionHdl hdl);
@@ -96,6 +110,12 @@ namespace ObscuraProto {
             std::mutex pending_requests_mutex_;
             std::map<uint32_t, std::promise<Payload>> pending_requests_;
             std::atomic<uint32_t> next_request_id_{0};
+
+            // For streaming
+            std::mutex streams_mutex_;
+            std::map<WsConnectionHdl, std::map<uint32_t, std::shared_ptr<Stream>>, std::owner_less<WsConnectionHdl>> per_connection_streams_;
+            std::function<void(std::shared_ptr<Stream>)> incoming_stream_handler_;
+            uint32_t next_outgoing_stream_id_ = 0;
         };
 
     }  // namespace net

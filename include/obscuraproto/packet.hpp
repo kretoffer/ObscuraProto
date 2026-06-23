@@ -139,6 +139,14 @@ namespace ObscuraProto {
         return read_param_bytes();
     }
 
+    namespace OpCode {
+        constexpr Payload::OpCode RESPONSE      = 0xFFFF;
+        constexpr Payload::OpCode STREAM_START  = 0xFFFD;
+        constexpr Payload::OpCode STREAM_DATA   = 0xFFFC;
+        constexpr Payload::OpCode STREAM_END    = 0xFFFB;
+        constexpr Payload::OpCode STREAM_CANCEL = 0xFFFA;
+    }
+
 }  // namespace ObscuraProto
 
 #endif  // OBSCURAPROTO_PACKET_HPP

@@ -31,13 +31,32 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(websocketpp)
 
-# Declare libsodium dependency
-FetchContent_Declare(
-    libsodium
-    GIT_REPOSITORY https://github.com/jedisct1/libsodium.git
-    GIT_TAG 1.0.18 # Using a stable tag
-)
-FetchContent_MakeAvailable(libsodium)
+# Find libsodium — portable across Linux, macOS, and Windows
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(LIBSODIUM IMPORTED_TARGET libsodium)
+endif()
+
+if(LIBSODIUM_FOUND)
+    message(STATUS "Found libsodium via pkg-config: ${LIBSODIUM_LIBRARIES}")
+    set(LIBSODIUM_LIBRARY PkgConfig::LIBSODIUM)
+else()
+    find_path(LIBSODIUM_INCLUDE_DIR
+        NAMES sodium.h
+        HINTS ENV LIBSODIUM_ROOT
+    )
+    find_library(LIBSODIUM_LIBRARY
+        NAMES sodium libsodium
+        HINTS ENV LIBSODIUM_ROOT
+    )
+
+    if(NOT LIBSODIUM_INCLUDE_DIR OR NOT LIBSODIUM_LIBRARY)
+        message(FATAL_ERROR "libsodium not found. Install it via your package manager "
+                            "(e.g., 'brew install libsodium' or 'apt install libsodium-dev').")
+    endif()
+
+    message(STATUS "Found libsodium: ${LIBSODIUM_LIBRARY}")
+endif()
 
 
 
@@ -56,6 +75,7 @@ target_sources(obscuraproto
         src/session.cpp
         src/version.cpp
         src/handshake_messages.cpp
+        src/stream.cpp
         src/ws_client.cpp
         src/ws_server.cpp
 )
@@ -67,8 +87,14 @@ target_include_directories(obscuraproto
         $<INSTALL_INTERFACE:include>
         $<BUILD_INTERFACE:${asio_SOURCE_DIR}/asio/include>
         $<BUILD_INTERFACE:${websocketpp_SOURCE_DIR}>
-        $<BUILD_INTERFACE:${libsodium_SOURCE_DIR}/src/libsodium/include>
 )
+
+if(LIBSODIUM_INCLUDE_DIR)
+    target_include_directories(obscuraproto
+        PUBLIC
+            $<BUILD_INTERFACE:${LIBSODIUM_INCLUDE_DIR}>
+    )
+endif()
 
 # Add compile definitions
 target_compile_definitions(obscuraproto
@@ -78,11 +104,20 @@ target_compile_definitions(obscuraproto
 
 # Link external libraries
 find_package(Threads REQUIRED)
-target_link_libraries(obscuraproto
-    PUBLIC
-        Threads::Threads
-        sodium
-)
+
+if(TARGET PkgConfig::LIBSODIUM)
+    target_link_libraries(obscuraproto
+        PUBLIC
+            Threads::Threads
+            PkgConfig::LIBSODIUM
+    )
+else()
+    target_link_libraries(obscuraproto
+        PUBLIC
+            Threads::Threads
+            ${LIBSODIUM_LIBRARY}
+    )
+endif()
 
 
 # ##############################################################################

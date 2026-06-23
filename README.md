@@ -423,10 +423,9 @@ To support real-time applications like voice/video calls or AI responses, Obscur
 A stream is managed by a unique `stream_id` and a set of special operation codes. The actual stream data (e.g., a video frame) is sent as a parameter within a `STREAM_DATA` payload.
 
 *   `stream_id`: A `uint32_t` that identifies a specific stream.
-*   `sequence_number`: A `uint64_t` that indicates the order of data chunks within a stream.
 
 The payload for a `STREAM_DATA` message looks like this before encryption:
-`[OpCode (2)] + [stream_id (4)] + [sequence_number (8)] + [data_chunk (N)]`
+`[OpCode (2)] + [stream_id (4)] + [data_chunk (N)]`
 
 
 ### 7.3. Streaming API Usage Example
@@ -488,6 +487,8 @@ outgoing_stream->end();
 ### 7.2. System Operation Codes
 
 The following `OpCode`s are reserved for the internal mechanics of the ObscuraProto library. You should **not** use them for your own application logic.
+
+Each stream is **bidirectional**: both sides can write and read data using the same `Stream` object.
 
 | OpCode (Hex)    | Name                  | Description                                                 |
 | --------------- | --------------------- | ----------------------------------------------------------- |
