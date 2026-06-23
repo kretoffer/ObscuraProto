@@ -140,6 +140,7 @@ namespace ObscuraProto {
     }
 
     namespace OpCode {
+        // Default reserved opcodes. Can be overridden via Config.
         constexpr Payload::OpCode RESPONSE = 0xFFFF;
         constexpr Payload::OpCode STREAM_START = 0xFFFD;
         constexpr Payload::OpCode STREAM_DATA = 0xFFFC;

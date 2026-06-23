@@ -8,6 +8,7 @@
 #include <mutex>
 #include <thread>
 
+#include "config.hpp"
 #include "session.hpp"
 #include "stream.hpp"
 #include "ws_common.hpp"
@@ -22,7 +23,7 @@ namespace ObscuraProto {
             using OnRequestCallback = std::function<Payload(PayloadReader&)>;
             using OnDisconnectCallback = std::function<void()>;
 
-            WsClientWrapper(KeyPair server_sign_key);
+            WsClientWrapper(KeyPair server_sign_key, Config config = Config::with_defaults());
             ~WsClientWrapper();
 
             /**
@@ -105,6 +106,7 @@ namespace ObscuraProto {
             void run_client();
 
             WsClient client_;
+            Config config_;
             std::unique_ptr<Session> session_;
             std::optional<KeyPair> client_identity_kp_;
             WsConnectionHdl connection_hdl_;

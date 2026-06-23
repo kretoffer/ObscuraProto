@@ -76,6 +76,8 @@ target_sources(obscuraproto
         src/version.cpp
         src/handshake_messages.cpp
         src/stream.cpp
+        src/config.cpp
+        src/rate_limiter.cpp
         src/ws_client.cpp
         src/ws_server.cpp
 )

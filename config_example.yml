@@ -1,0 +1,35 @@
+# ObscuraProto Default Configuration
+# Copy this file and adjust values for your deployment.
+
+server:
+  rate_limiting:
+    enabled: true                    # false = disable all rate limiting
+    messages_per_second: 100         # max messages per connection per second (0 = unlimited)
+    burst_size: 200                  # token bucket burst (0 = same as messages_per_second)
+    handshake_attempts_per_minute: 10  # max handshake attempts per IP per minute (0 = unlimited)
+    connections_per_minute: 30       # max new connections per IP per minute (0 = unlimited)
+
+  connection_limits:
+    enabled: true                    # false = disable connection limits
+    max_per_ip: 10                   # max concurrent connections from one IP (0 = unlimited)
+    max_total: 1000                  # max total concurrent connections (0 = unlimited)
+
+  message_limits:
+    enabled: true                    # false = disable message size limits
+    max_ws_frame_size: 1048576       # max raw WebSocket frame size in bytes (0 = unlimited)
+    max_decrypted_payload: 65535     # max decrypted payload parameters in bytes (0 = unlimited)
+
+  timeouts:
+    enabled: true                    # false = disable all timeouts
+    handshake_ms: 10000              # max time to complete handshake (0 = unlimited)
+    idle_ms: 300000                  # max idle time before disconnect (0 = unlimited)
+    check_interval_ms: 5000          # how often to check for timeouts
+
+# Default reserved opcodes. Can be changed if they conflict with application opcodes.
+# Both client and server MUST use the same values.
+opcodes:
+  RESPONSE: 0xFFFF
+  STREAM_START: 0xFFFD
+  STREAM_DATA: 0xFFFC
+  STREAM_END: 0xFFFB
+  STREAM_CANCEL: 0xFFFA

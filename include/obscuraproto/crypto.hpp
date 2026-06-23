@@ -1,12 +1,24 @@
 #ifndef OBSCURAPROTO_CRYPTO_HPP
 #define OBSCURAPROTO_CRYPTO_HPP
 
+#include <sodium.h>
+
 #include <string>
 
 #include "keys.hpp"
 #include "packet.hpp"
 
 namespace ObscuraProto {
+
+    /**
+     * @brief Overwrites a byte_vector with zeros using sodium_memzero.
+     */
+    inline void secure_wipe(byte_vector& v) {
+        if (!v.empty()) {
+            sodium_memzero(v.data(), v.size());
+            v.clear();
+        }
+    }
 
     class Crypto {
     public:

@@ -4,9 +4,10 @@
 #include <cstdint>
 #include <vector>
 
+#include "secure_buffer.hpp"
+
 namespace ObscuraProto {
 
-    // A generic structure for a public key.
     struct PublicKey {
         std::vector<uint8_t> data;
 
@@ -21,18 +22,15 @@ namespace ObscuraProto {
         }
     };
 
-    // A generic structure for a private key.
     struct PrivateKey {
-        std::vector<uint8_t> data;
+        SecureBuffer data;
     };
 
-    // A key pair consisting of a public and a private key.
     struct KeyPair {
         PublicKey publicKey;
         PrivateKey privateKey;
     };
 
-    // A digital signature.
     struct Signature {
         std::vector<uint8_t> data;
     };

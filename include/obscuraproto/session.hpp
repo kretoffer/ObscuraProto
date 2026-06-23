@@ -24,6 +24,12 @@ namespace ObscuraProto {
          *                        For a client, a key pair with only the public key part filled.
          */
         Session(Role role, KeyPair server_sign_key);
+        ~Session();
+
+        Session(const Session&) = delete;
+        Session& operator=(const Session&) = delete;
+        Session(Session&&) = default;
+        Session& operator=(Session&&) = default;
 
         /**
          * @brief [CLIENT] Sets the identity key pair for client authentication.
@@ -98,6 +104,8 @@ namespace ObscuraProto {
         std::optional<PublicKey> get_peer_identity() const;
 
     private:
+        void wipe_keys();
+
         Role role_;
         bool handshake_complete_ = false;
         std::optional<Version> selected_version_ = std::nullopt;

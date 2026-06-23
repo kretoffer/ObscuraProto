@@ -1,5 +1,7 @@
 #include "obscuraproto/session.hpp"
 
+#include <sodium.h>
+
 #include <algorithm>
 #include <optional>
 
@@ -10,6 +12,22 @@ namespace ObscuraProto {
     Session::Session(Role role, KeyPair server_sign_key) : role_(role), server_sign_key_(std::move(server_sign_key)) {
         // For a client, the private key part of server_sign_key_ should be empty.
         // For a server, both parts should be present.
+    }
+
+    Session::~Session() {
+        wipe_keys();
+    }
+
+    void Session::wipe_keys() {
+        if (session_keys_) {
+            secure_wipe(session_keys_->rx);
+            secure_wipe(session_keys_->tx);
+            session_keys_.reset();
+        }
+        if (ephemeral_kx_kp_) {
+            ephemeral_kx_kp_->privateKey.data.clear();
+            ephemeral_kx_kp_.reset();
+        }
     }
 
     void Session::set_client_identity_key(KeyPair identity_kp) {

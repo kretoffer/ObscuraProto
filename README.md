@@ -1,10 +1,10 @@
 # ObscuraProto
 
-This document describes the principles of the ObscuraProto **1.0** hybrid encryption protocol. This version uses elliptic curve cryptography, **ChaCha20-Poly1305**, and a session resumption mechanism.
+This document describes the principles of the ObscuraProto **1.0** hybrid encryption protocol. This version uses elliptic curve cryptography and **ChaCha20-Poly1305**.
 
 ## 1. Protocol Architecture
 
-The protocol defines two ways to establish a secure channel: a full handshake for new connections and a shortened one for resuming previous sessions.
+The protocol uses a full handshake for secure channel establishment.
 
 ### Phase 1: Full Handshake using ECC
 
@@ -29,22 +29,7 @@ This phase is used for the client's first connection to the server and includes 
     *   The client and server compute a shared secret `S` using the ECDH protocol.
     *   The secret `S` is passed through a **Key Derivation Function (KDF)**, such as HKDF, to generate **two symmetric keys** (one for sending, one for receiving) for the ChaCha20-Poly1305 cipher.
 
-5.  **Session Ticket Creation:** After a successful handshake, the server can create a **Session Ticket** for session resumption. This ticket contains session information, encrypted with a key known only to the server, and sends it to the client. The ticket **must include information about the protocol version** on which the session was established.
-
-### Phase 2: Session Resumption
-
-If the client has a session ticket, it can use a shortened handshake.
-
-1.  **Client Initiation:**
-    *   The client connects. **If the client has a newer protocol version available than the one with which the session ticket was issued, or if the session ticket is missing/invalid, the client initiates a full handshake.**
-    *   Otherwise (if the ticket is valid and the client does not have a newer protocol version), the client sends the previously received **session ticket** for resumption.
-2.  **Server Ticket Verification:**
-    *   The server decrypts the ticket and extracts the **protocol version** and the session master key.
-    *   The server verifies that it still supports the protocol version specified in the ticket. If the version is outdated and no longer supported, the server refuses resumption and may suggest the client perform a full handshake.
-    *   If the version is supported, the server verifies the ticket's validity (e.g., its expiration date) and extracts the master key.
-3.  **Data Transfer Start:** The parties skip asymmetric cryptography and immediately proceed to secure data transfer, using keys generated from the session master key.
-
-### Phase 3: Data Transfer
+### Phase 2: Data Transfer
 
 1.  Data is encrypted using a modern **AEAD cipher (Authenticated Encryption with Associated Data) ChaCha20-Poly1305**. This cipher combines encryption and authentication in a single operation.
 2.  For each message, a unique **Nonce** (number used once) of 12 bytes is generated and transmitted in plaintext.
@@ -134,7 +119,7 @@ This algorithm ensures reliable protection of transmitted data within the Obscur
 ## 3. Reliability Analysis
 
 *   **Perfect Forward Secrecy (PFS):** Maintained thanks to ephemeral ECDH keys.
-*   **Performance:** ECC provides high speed for asymmetric operations. ChaCha20-Poly1305 is a very fast symmetric cipher. Session resumption speeds up repeated connections.
+*   **Performance:** ECC provides high speed for asymmetric operations. ChaCha20-Poly1305 is a very fast symmetric cipher.
 *   **Trust Model:** The protocol assumes that the client trusts the server's public Ed25519 key in advance.
 
 ## 4. Key Decisions
@@ -589,3 +574,68 @@ target_link_libraries(your_executable_name
         obscuraproto
 )
 ```
+
+## 9. Configuration
+
+Starting from v1.0, ObscuraProto supports a YAML-based configuration system. All server-side protections (rate limiting, connection limits, message limits, timeouts) and reserved opcodes are defined in the config.
+
+Default values are hardcoded — you only need a config file if you want to override them.
+
+### 9.1. Loading a Config
+
+```cpp
+ObscuraProto::Config cfg = ObscuraProto::Config::from_yaml("config.yml");
+ObscuraProto::net::WsServerWrapper server(server_key, cfg);
+```
+
+If the file is not found, defaults are used and a warning is printed. Load the config **once at startup** — it is immutable after creation.
+
+### 9.2. Config Reference
+
+See `config.yml` in the project root for the full reference with comments.
+
+| Section              | Key                         | Default    | Description                                |
+| -------------------- | --------------------------- | ---------- | ------------------------------------------ |
+| `rate_limiting`      | `enabled`                   | `true`     | Enable/disable all rate limiting           |
+|                      | `messages_per_second`       | `100`      | Max messages/sec per connection (`0`=unlim)|
+|                      | `burst_size`                | `200`      | Token bucket burst size (`0`=same as rate) |
+|                      | `handshake_attempts_per_minute` | `10`   | Max handshake attempts/min per IP          |
+|                      | `connections_per_minute`    | `30`       | Max new connections/min per IP             |
+| `connection_limits`  | `enabled`                   | `true`     | Enable/disable connection limits           |
+|                      | `max_per_ip`                | `10`       | Max concurrent connections per IP          |
+|                      | `max_total`                 | `1000`     | Max total concurrent connections           |
+| `message_limits`     | `enabled`                   | `true`     | Enable/disable message size limits         |
+|                      | `max_ws_frame_size`         | `1048576`  | Max raw WebSocket frame (bytes)            |
+|                      | `max_decrypted_payload`     | `65535`    | Max decrypted payload params (bytes)       |
+| `timeouts`           | `enabled`                   | `true`     | Enable/disable all timeouts                |
+|                      | `handshake_ms`              | `10000`    | Handshake timeout (ms)                     |
+|                      | `idle_ms`                   | `300000`   | Idle connection timeout (ms)               |
+|                      | `check_interval_ms`         | `5000`     | Timeout check interval (ms)                |
+| `opcodes`            | `RESPONSE`                  | `0xFFFF`   | Reserved: response opcode                  |
+|                      | `STREAM_START`              | `0xFFFD`   | Reserved: stream start opcode              |
+|                      | `STREAM_DATA`               | `0xFFFC`   | Reserved: stream data opcode               |
+|                      | `STREAM_END`                | `0xFFFB`   | Reserved: stream end opcode                |
+|                      | `STREAM_CANCEL`             | `0xFFFA`   | Reserved: stream cancel opcode             |
+
+### 9.3. Using the Config Without a File
+
+You can also create and modify a `Config` object programmatically:
+
+```cpp
+ObscuraProto::Config cfg = ObscuraProto::Config::with_defaults();
+cfg.rate_limit.messages_per_second = 500;
+cfg.timeouts.handshake_ms = 15000;
+cfg.opcodes.RESPONSE = 0xE0E0;
+
+ObscuraProto::net::WsServerWrapper server(server_key, cfg);
+```
+
+### 9.4. Notable Changes in v1.0
+
+- **Rate Limiting** — per-connection token bucket, per-IP sliding windows
+- **Connection Limits** — max connections per IP and total
+- **Message Size Limits** — configurable WebSocket frame and decrypted payload limits
+- **Timeouts** — handshake and idle timeouts with periodic checking
+- **Secure Memory** — private keys are allocated via `sodium_malloc` and zeroed on destruction
+- **Configurable OpCodes** — reserved opcodes can be changed in the config if they conflict with application opcodes
+- Session resumption (Phase 2) has been **removed** from the protocol and documentation. It may be re-introduced in a future version.

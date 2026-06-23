@@ -8,7 +8,7 @@
 namespace ObscuraProto {
     namespace net {
 
-        WsClientWrapper::WsClientWrapper(KeyPair server_sign_key) {
+        WsClientWrapper::WsClientWrapper(KeyPair server_sign_key, Config config) : config_(std::move(config)) {
             session_ = std::make_unique<Session>(Role::CLIENT, std::move(server_sign_key));
             client_.init_asio();
             client_.set_open_handler(std::bind(&WsClientWrapper::on_open, this, std::placeholders::_1));
@@ -18,6 +18,10 @@ namespace ObscuraProto {
                 std::bind(&WsClientWrapper::on_message, this, std::placeholders::_1, std::placeholders::_2));
             client_.clear_access_channels(websocketpp::log::alevel::all);
             client_.set_close_handshake_timeout(100);
+
+            if (config_.message_limits.enabled && config_.message_limits.max_ws_frame_size > 0) {
+                client_.set_max_message_size(config_.message_limits.max_ws_frame_size);
+            }
         }
 
         WsClientWrapper::~WsClientWrapper() {
@@ -46,16 +50,12 @@ namespace ObscuraProto {
         }
 
         void WsClientWrapper::disconnect() {
-            // If the client thread doesn't exist, we have nothing to do.
             if (!client_thread_) {
                 return;
             }
 
-            // Stop the ASIO io_service processing loop.
-            // This will cause client_.run() to return.
             client_.stop();
 
-            // Fulfill any pending request promises with an exception
             {
                 std::lock_guard<std::mutex> lock(pending_requests_mutex_);
                 for (auto& pair : pending_requests_) {
@@ -64,20 +64,16 @@ namespace ObscuraProto {
                 pending_requests_.clear();
             }
 
-            // If the connection is open, request a clean close.
             if (is_connected_) {
                 try {
                     websocketpp::lib::error_code ec;
                     client_.close(connection_hdl_, websocketpp::close::status::going_away, "", ec);
                     if (ec) {
-                        // This can happen if the connection is already closing, which is fine.
                     }
                 } catch (const websocketpp::exception& e) {
-                    // Ignore exceptions on close
                 }
             }
 
-            // Wait for the thread to finish.
             if (client_thread_->joinable()) {
                 client_thread_->join();
             }
@@ -89,6 +85,13 @@ namespace ObscuraProto {
         void WsClientWrapper::send(const Payload& payload) {
             if (!is_connected_ || !session_->is_handshake_complete()) {
                 throw LogicError("Session not ready for sending data.");
+            }
+
+            // Check payload size on send
+            if (config_.message_limits.enabled && config_.message_limits.max_decrypted_payload > 0) {
+                if (payload.parameters.size() > config_.message_limits.max_decrypted_payload) {
+                    throw LogicError("Payload exceeds max_decrypted_payload limit.");
+                }
             }
 
             try {
@@ -106,11 +109,10 @@ namespace ObscuraProto {
 
             uint32_t request_id = next_request_id_++;
 
-            // Manually prepend the request ID to the payload parameters
             Payload request_payload;
             request_payload.op_code = payload.op_code;
 
-            PayloadBuilder id_builder(0);  // op_code doesn't matter here
+            PayloadBuilder id_builder(0);
             id_builder.add_param(request_id);
             byte_vector id_param = id_builder.build().parameters;
 
@@ -133,7 +135,8 @@ namespace ObscuraProto {
         }
 
         void WsClientWrapper::send_response(uint32_t request_id, const Payload& payload) {
-            PayloadBuilder response_builder(OpCode::RESPONSE);
+            const auto& oc = config_.opcodes;
+            PayloadBuilder response_builder(oc.RESPONSE);
             response_builder.add_param(request_id);
             response_builder.add_param(payload.serialize());
 
@@ -150,7 +153,8 @@ namespace ObscuraProto {
                 active_streams_[stream_id] = stream;
             }
 
-            PayloadBuilder builder(OpCode::STREAM_START);
+            const auto& oc = config_.opcodes;
+            PayloadBuilder builder(oc.STREAM_START);
             builder.add_param(stream_id);
             send(builder.build());
 
@@ -193,7 +197,6 @@ namespace ObscuraProto {
             connection_hdl_ = hdl;
             is_connected_ = true;
 
-            // Start the ObscuraProto handshake
             try {
                 if (client_identity_kp_.has_value()) {
                     session_->set_client_identity_key(*client_identity_kp_);
@@ -223,12 +226,13 @@ namespace ObscuraProto {
 
         void WsClientWrapper::on_message(WsConnectionHdl hdl, WsClientMessagePtr msg) {
             if (msg->get_opcode() != BINDATA_OPCODE) {
-                return;  // Ignore non-binary messages
+                return;
             }
+
+            const auto& oc = config_.opcodes;
 
             try {
                 if (!session_->is_handshake_complete()) {
-                    // Expecting ServerHello
                     byte_vector data(msg->get_payload().begin(), msg->get_payload().end());
                     ServerHello server_hello = ServerHello::deserialize(data);
                     session_->client_finalize_handshake(server_hello);
@@ -237,12 +241,18 @@ namespace ObscuraProto {
                         on_ready_callback_();
                     }
                 } else {
-                    // Expecting encrypted data
                     byte_vector packet(msg->get_payload().begin(), msg->get_payload().end());
                     Payload payload = session_->decrypt_packet(packet);
 
-                    if (payload.op_code == OpCode::RESPONSE) {
-                        // This is a response to a request
+                    if (config_.message_limits.enabled && config_.message_limits.max_decrypted_payload > 0) {
+                        if (payload.parameters.size() > config_.message_limits.max_decrypted_payload) {
+                            std::cerr << "Received payload exceeds max_decrypted_payload limit." << std::endl;
+                            disconnect();
+                            return;
+                        }
+                    }
+
+                    if (payload.op_code == oc.RESPONSE) {
                         PayloadReader reader(payload);
                         uint32_t request_id = reader.read_param<uint32_t>();
                         byte_vector response_bytes = reader.read_param<byte_vector>();
@@ -261,54 +271,43 @@ namespace ObscuraProto {
                             }
                         }
 
-                    } else if (payload.op_code == OpCode::STREAM_START || payload.op_code == OpCode::STREAM_DATA ||
-                               payload.op_code == OpCode::STREAM_END || payload.op_code == OpCode::STREAM_CANCEL) {
+                    } else if (payload.op_code == oc.STREAM_START || payload.op_code == oc.STREAM_DATA ||
+                               payload.op_code == oc.STREAM_END || payload.op_code == oc.STREAM_CANCEL) {
                         PayloadReader reader(payload);
                         uint32_t stream_id = reader.read_param<uint32_t>();
 
-                        switch (payload.op_code) {
-                            case OpCode::STREAM_START: {
-                                auto stream =
-                                    std::make_shared<Stream>(stream_id, [this](const Payload& p) { send(p); });
-                                {
-                                    std::lock_guard<std::mutex> lock(streams_mutex_);
-                                    active_streams_[stream_id] = stream;
-                                }
-                                if (incoming_stream_handler_) {
-                                    incoming_stream_handler_(std::move(stream));
-                                }
-                                break;
-                            }
-                            case OpCode::STREAM_DATA: {
-                                byte_vector data = reader.read_param<byte_vector>();
+                        if (payload.op_code == oc.STREAM_START) {
+                            auto stream = std::make_shared<Stream>(stream_id, [this](const Payload& p) { send(p); });
+                            {
                                 std::lock_guard<std::mutex> lock(streams_mutex_);
-                                auto it = active_streams_.find(stream_id);
-                                if (it != active_streams_.end()) {
-                                    it->second->dispatch_data(std::move(data));
-                                }
-                                break;
+                                active_streams_[stream_id] = stream;
                             }
-                            case OpCode::STREAM_END: {
-                                std::lock_guard<std::mutex> lock(streams_mutex_);
-                                auto it = active_streams_.find(stream_id);
-                                if (it != active_streams_.end()) {
-                                    it->second->dispatch_end();
-                                }
-                                break;
+                            if (incoming_stream_handler_) {
+                                incoming_stream_handler_(std::move(stream));
                             }
-                            case OpCode::STREAM_CANCEL: {
-                                std::lock_guard<std::mutex> lock(streams_mutex_);
-                                auto it = active_streams_.find(stream_id);
-                                if (it != active_streams_.end()) {
-                                    it->second->dispatch_cancel();
-                                    active_streams_.erase(it);
-                                }
-                                break;
+                        } else if (payload.op_code == oc.STREAM_DATA) {
+                            byte_vector data = reader.read_param<byte_vector>();
+                            std::lock_guard<std::mutex> lock(streams_mutex_);
+                            auto it = active_streams_.find(stream_id);
+                            if (it != active_streams_.end()) {
+                                it->second->dispatch_data(std::move(data));
+                            }
+                        } else if (payload.op_code == oc.STREAM_END) {
+                            std::lock_guard<std::mutex> lock(streams_mutex_);
+                            auto it = active_streams_.find(stream_id);
+                            if (it != active_streams_.end()) {
+                                it->second->dispatch_end();
+                            }
+                        } else if (payload.op_code == oc.STREAM_CANCEL) {
+                            std::lock_guard<std::mutex> lock(streams_mutex_);
+                            auto it = active_streams_.find(stream_id);
+                            if (it != active_streams_.end()) {
+                                it->second->dispatch_cancel();
+                                active_streams_.erase(it);
                             }
                         }
 
                     } else {
-                        // This is a regular push message or a request from the server
                         bool handled = false;
                         OnRequestCallback request_handler;
                         OnPayloadCallback op_handler;

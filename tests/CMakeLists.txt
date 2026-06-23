@@ -20,6 +20,8 @@ add_executable(obscuraproto_tests
     version_negotiation_test.cpp
     client_auth_test.cpp
     integration_test.cpp
+    rate_limiter_test.cpp
+    config_test.cpp
 )
 
 # Link the test executable against the main library and Google Test

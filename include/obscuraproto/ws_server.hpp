@@ -2,12 +2,18 @@
 #define OBSCURAPROTO_WS_SERVER_HPP
 
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <future>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <string>
 #include <thread>
+#include <vector>
 
+#include "config.hpp"
+#include "rate_limiter.hpp"
 #include "session.hpp"
 #include "stream.hpp"
 #include "ws_common.hpp"
@@ -21,7 +27,7 @@ namespace ObscuraProto {
             using OnRequestCallback = std::function<Payload(WsConnectionHdl, PayloadReader&)>;
             using IdentityHandler = std::function<bool(WsConnectionHdl, PublicKey)>;
 
-            WsServerWrapper(KeyPair server_sign_key);
+            WsServerWrapper(KeyPair server_sign_key, Config config = Config::with_defaults());
             ~WsServerWrapper();
 
             void run(uint16_t port);
@@ -166,16 +172,40 @@ namespace ObscuraProto {
             Payload sync_request_to_identity(const PublicKey& identity_pk, const Payload& payload);
 
         private:
+            struct ConnectionState {
+                ConnectionState(Session&& sess, uint64_t rl_id, std::string ip, int64_t activity)
+                    : session(std::move(sess)),
+                      rate_limiter_id(rl_id),
+                      remote_ip(std::move(ip)),
+                      last_activity_ms(activity) {
+                }
+
+                Session session;
+                uint64_t rate_limiter_id = 0;
+                std::string remote_ip;
+                int64_t last_activity_ms = 0;
+            };
+
             void on_open(WsConnectionHdl hdl);
             void on_close(WsConnectionHdl hdl);
             void on_message(WsConnectionHdl hdl, WsMessagePtr msg);
 
-            WsServer server_;
-            KeyPair server_sign_key_;
-            std::map<WsConnectionHdl, Session, std::owner_less<WsConnectionHdl>> sessions_;
+            std::string get_remote_ip(WsConnectionHdl hdl);
 
-            // Anonymous sessions
-            std::map<WsConnectionHdl, Session, std::owner_less<WsConnectionHdl>> anon_sessions_;
+            void schedule_timeout_check();
+            void check_timeouts();
+
+            WsServer server_;
+            Config config_;
+            RateLimiter rate_limiter_;
+            KeyPair server_sign_key_;
+
+            std::map<WsConnectionHdl, ConnectionState, std::owner_less<WsConnectionHdl>> sessions_;
+            std::map<WsConnectionHdl, ConnectionState, std::owner_less<WsConnectionHdl>> anon_sessions_;
+
+            // Timestamp when a connection was opened (for handshake timeout)
+            std::map<WsConnectionHdl, int64_t, std::owner_less<WsConnectionHdl>> handshake_open_time_;
+            std::mutex handshake_time_mutex_;
 
             std::mutex op_handlers_mutex_;
             std::map<Payload::OpCode, OnPayloadCallback> op_code_handlers_;
@@ -208,6 +238,16 @@ namespace ObscuraProto {
             std::mutex identity_map_mutex_;
             std::map<PublicKey, WsConnectionHdl> identity_to_hdl_;
             std::map<WsConnectionHdl, PublicKey, std::owner_less<WsConnectionHdl>> hdl_to_identity_;
+
+            // Periodic timeout check timer
+            std::shared_ptr<asio::steady_timer> timeout_timer_;
+            std::atomic<bool> stopping_{false};
+
+            using clock = std::chrono::steady_clock;
+
+            int64_t now_ms() const {
+                return std::chrono::duration_cast<std::chrono::milliseconds>(clock::now().time_since_epoch()).count();
+            }
         };
 
     }  // namespace net
