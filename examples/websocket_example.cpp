@@ -56,8 +56,8 @@ int main() {
     // 3. Start Server
     uint16_t port = 9002;
     ObscuraProto::net::WsServerWrapper server(server_long_term_key);
-    // Use the default handler for incoming messages
-    server.set_default_payload_handler([&server](auto hdl, ObscuraProto::Payload payload) {
+    // Use the default handler for incoming messages (anonymous — no client identity set)
+    server.set_anon_default_payload_handler([&server](auto hdl, ObscuraProto::Payload payload) {
         std::cout << "[SERVER] Received payload from client." << std::endl;
         print_payload("[SERVER]", payload);
 

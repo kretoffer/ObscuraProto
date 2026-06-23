@@ -80,8 +80,17 @@ This file combines everything into a unified session management logic.
     - **`client_initiate_handshake()`**: **For the client.** Starts the handshake by creating a `ClientHello` message.
     - **`server_respond_to_handshake(...)`**: **For the server.** Receives `ClientHello`, validates it, and generates a `ServerHello` response. Throws an error if the handshake fails.
     - **`client_finalize_handshake(...)`**: **For the client.** Receives `ServerHello`, validates it, and computes the shared session keys. Throws an error if the handshake fails.
-    - **`encrypt_payload(...)` / `decrypt_packet(...)`**: The main functions for data exchange after the handshake. They manage encryption and message counters to protect against replay attacks.
-    - **`is_handshake_complete()`**: Allows checking if the secure channel has been established.
+     - **`encrypt_payload(...)` / `decrypt_packet(...)`**: The main functions for data exchange after the handshake. They manage encryption and message counters to protect against replay attacks.
+     - **`is_handshake_complete()`**: Allows checking if the secure channel has been established.
+     - **`set_client_identity_key(...)`**: **For the client.** Sets the Ed25519 keypair used for client authentication during the handshake.
+     - **`has_peer_identity()`**: Checks if the connecting peer provided and verified a client identity.
+     - **`get_peer_identity()`**: Returns the verified Ed25519 public key of the connecting peer, if available.
+
+### Client Identity Authentication
+
+Beginning with version 1.0, ObscuraProto supports **optional client authentication**. The client can include its Ed25519 public key and a signature over its ephemeral X25519 key in the `ClientHello` message. The server verifies the signature and, if valid, associates the connection with that public key.
+
+Sessions without identity are considered **anonymous** and are routed to a separate set of handlers, allowing applications to expose registration or login flows without authentication.
 
 ### Session Lifecycle
 

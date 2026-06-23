@@ -19,6 +19,7 @@ namespace ObscuraProto {
         public:
             using OnPayloadCallback = std::function<void(WsConnectionHdl, Payload)>;
             using OnRequestCallback = std::function<Payload(WsConnectionHdl, PayloadReader&)>;
+            using IdentityHandler = std::function<bool(WsConnectionHdl, PublicKey)>;
 
             WsServerWrapper(KeyPair server_sign_key);
             ~WsServerWrapper();
@@ -90,6 +91,80 @@ namespace ObscuraProto {
              */
             void register_incoming_stream_handler(std::function<void(std::shared_ptr<Stream>)> callback);
 
+            // --- Anonymous Sessions ---
+
+            /**
+             * @brief Sends a payload to an anonymous session.
+             * @param hdl The connection handle of the anonymous client.
+             * @param payload The payload to send.
+             */
+            void send_anonymous(WsConnectionHdl hdl, const Payload& payload);
+
+            /**
+             * @brief Registers a handler for a specific operation code on anonymous sessions.
+             * @param op_code The operation code to handle.
+             * @param callback The function to call when a payload with this op_code is received from an anonymous
+             * client.
+             */
+            void register_anon_op_handler(Payload::OpCode op_code, OnPayloadCallback callback);
+
+            /**
+             * @brief Registers a simplified request-response handler for anonymous sessions.
+             * @param op_code The operation code of the request to handle.
+             * @param callback The function to call. It receives a reader for the request parameters
+             *                 and should return a payload for the response.
+             */
+            void register_anon_request_handler(Payload::OpCode op_code, OnRequestCallback callback);
+
+            /**
+             * @brief Sets a default handler for anonymous sessions.
+             * @param callback The function to call for any unhandled opcode from an anonymous client.
+             */
+            void set_anon_default_payload_handler(OnPayloadCallback callback);
+
+            // --- Client Identity ---
+
+            /**
+             * @brief Sets a handler that is called when a client authenticates with an identity key.
+             * @param callback The function to call. It receives the connection handle and the client's
+             *                 Ed25519 public key. Return true to accept the connection, false to reject it.
+             */
+            void set_client_identity_handler(IdentityHandler callback);
+
+            /**
+             * @brief Gets the verified identity public key for an authenticated session.
+             * @param hdl The connection handle of the authenticated client.
+             * @return The client's Ed25519 public key.
+             * @throws ObscuraProto::LogicError if the session has no peer identity.
+             */
+            PublicKey get_client_identity(WsConnectionHdl hdl);
+
+            /**
+             * @brief Sends a payload to a specific client identified by their public key.
+             * @param identity_pk The client's Ed25519 public key.
+             * @param payload The payload to send.
+             * @throws ObscuraProto::LogicError if the identity is not connected.
+             */
+            void send_to_identity(const PublicKey& identity_pk, const Payload& payload);
+
+            /**
+             * @brief Sends a request to a specific client identified by their public key.
+             * @param identity_pk The client's Ed25519 public key.
+             * @param payload The payload to send as a request.
+             * @return A future that will contain the response payload.
+             * @throws ObscuraProto::LogicError if the identity is not connected.
+             */
+            std::future<Payload> async_request_to_identity(const PublicKey& identity_pk, const Payload& payload);
+
+            /**
+             * @brief Sends a synchronous request to a specific client identified by their public key.
+             * @param identity_pk The client's Ed25519 public key.
+             * @param payload The payload to send as a request.
+             * @return A response payload.
+             * @throws ObscuraProto::LogicError if the identity is not connected.
+             */
+            Payload sync_request_to_identity(const PublicKey& identity_pk, const Payload& payload);
+
         private:
             void on_open(WsConnectionHdl hdl);
             void on_close(WsConnectionHdl hdl);
@@ -99,16 +174,26 @@ namespace ObscuraProto {
             KeyPair server_sign_key_;
             std::map<WsConnectionHdl, Session, std::owner_less<WsConnectionHdl>> sessions_;
 
+            // Anonymous sessions
+            std::map<WsConnectionHdl, Session, std::owner_less<WsConnectionHdl>> anon_sessions_;
+
             std::mutex op_handlers_mutex_;
             std::map<Payload::OpCode, OnPayloadCallback> op_code_handlers_;
             std::map<Payload::OpCode, OnRequestCallback> request_handlers_;
             OnPayloadCallback default_payload_handler_;
 
+            // Anonymous handlers
+            std::mutex anon_op_handlers_mutex_;
+            std::map<Payload::OpCode, OnPayloadCallback> anon_op_code_handlers_;
+            std::map<Payload::OpCode, OnRequestCallback> anon_request_handlers_;
+            OnPayloadCallback anon_default_payload_handler_;
+
             std::unique_ptr<std::thread> server_thread_;
 
             // For request-response mechanism (server-to-client)
             std::mutex pending_requests_mutex_;
-            std::map<uint32_t, std::promise<Payload>> pending_requests_;
+            std::map<WsConnectionHdl, std::map<uint32_t, std::promise<Payload>>, std::owner_less<WsConnectionHdl>>
+                pending_requests_;
             std::atomic<uint32_t> next_request_id_{0};
 
             // For streaming
@@ -117,6 +202,12 @@ namespace ObscuraProto {
                 per_connection_streams_;
             std::function<void(std::shared_ptr<Stream>)> incoming_stream_handler_;
             uint32_t next_outgoing_stream_id_ = 0;
+
+            // Client identity
+            IdentityHandler client_identity_handler_;
+            std::mutex identity_map_mutex_;
+            std::map<PublicKey, WsConnectionHdl> identity_to_hdl_;
+            std::map<WsConnectionHdl, PublicKey, std::owner_less<WsConnectionHdl>> hdl_to_identity_;
         };
 
     }  // namespace net

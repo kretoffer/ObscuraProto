@@ -35,8 +35,8 @@ int main() {
     uint16_t port = 9004;
     ObscuraProto::net::WsServerWrapper server(server_long_term_key);
 
-    // Register a handler for OP_GET_STATUS
-    server.register_op_handler(OP_GET_STATUS, [&](auto hdl, ObscuraProto::Payload payload) {
+    // Register a handler for OP_GET_STATUS (anonymous — no client identity set)
+    server.register_anon_op_handler(OP_GET_STATUS, [&](auto hdl, ObscuraProto::Payload payload) {
         std::cout << "[SERVER] Handler for OP_GET_STATUS called." << std::endl;
         ObscuraProto::Payload response = ObscuraProto::PayloadBuilder(0x6001).add_param("Server is OK").build();
         server.send(hdl, response);
@@ -47,8 +47,8 @@ int main() {
         }
     });
 
-    // Register a handler for OP_ECHO
-    server.register_op_handler(OP_ECHO, [&](auto hdl, ObscuraProto::Payload payload) {
+    // Register a handler for OP_ECHO (anonymous — no client identity set)
+    server.register_anon_op_handler(OP_ECHO, [&](auto hdl, ObscuraProto::Payload payload) {
         std::cout << "[SERVER] Handler for OP_ECHO called." << std::endl;
         // Just echo the same payload back
         server.send(hdl, payload);
@@ -59,8 +59,8 @@ int main() {
         }
     });
 
-    // Set a default handler for anything else
-    server.set_default_payload_handler([&](auto hdl, ObscuraProto::Payload payload) {
+    // Set a default handler for anything else (anonymous — no client identity set)
+    server.set_anon_default_payload_handler([&](auto hdl, ObscuraProto::Payload payload) {
         std::cout << "[SERVER] Default handler called for OpCode 0x" << std::hex << payload.op_code << std::dec
                   << std::endl;
         {

@@ -25,6 +25,12 @@ namespace ObscuraProto {
             WsClientWrapper(KeyPair server_sign_key);
             ~WsClientWrapper();
 
+            /**
+             * @brief Sets the client's Ed25519 identity keypair for authentication.
+             * @param identity_kp The client's Ed25519 keypair.
+             */
+            void set_client_identity(KeyPair identity_kp);
+
             void connect(const std::string& uri);
             void disconnect();
             void send(const Payload& payload);
@@ -100,6 +106,7 @@ namespace ObscuraProto {
 
             WsClient client_;
             std::unique_ptr<Session> session_;
+            std::optional<KeyPair> client_identity_kp_;
             WsConnectionHdl connection_hdl_;
             std::unique_ptr<std::thread> client_thread_;
             bool is_connected_ = false;

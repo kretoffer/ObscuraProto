@@ -12,6 +12,13 @@ namespace ObscuraProto {
         // For a server, both parts should be present.
     }
 
+    void Session::set_client_identity_key(KeyPair identity_kp) {
+        if (role_ != Role::CLIENT) {
+            throw LogicError("Only clients can set an identity key.");
+        }
+        client_identity_kp_ = std::move(identity_kp);
+    }
+
     // --- Handshake ---
 
     ClientHello Session::client_initiate_handshake() {
@@ -26,6 +33,13 @@ namespace ObscuraProto {
         ClientHello hello;
         hello.supported_versions = SUPPORTED_VERSIONS;
         hello.ephemeral_pk = ephemeral_kx_kp_->publicKey;
+
+        // 3. Include client identity if set
+        if (client_identity_kp_.has_value()) {
+            hello.has_client_identity = true;
+            hello.identity_pk = client_identity_kp_->publicKey;
+            hello.identity_sig = Crypto::sign(hello.ephemeral_pk.data, client_identity_kp_->privateKey);
+        }
 
         return hello;
     }
@@ -43,17 +57,27 @@ namespace ObscuraProto {
         }
         selected_version_ = *chosen_version;
 
-        // 2. Generate an ephemeral key pair for this session
+        // 2. Verify client identity if provided
+        if (client_hello.has_client_identity) {
+            bool sig_valid =
+                Crypto::verify(client_hello.identity_sig, client_hello.ephemeral_pk.data, client_hello.identity_pk);
+            if (!sig_valid) {
+                throw RuntimeError("Client identity signature verification failed.");
+            }
+            peer_identity_ = client_hello.identity_pk;
+        }
+
+        // 3. Generate an ephemeral key pair for this session
         ephemeral_kx_kp_ = std::make_unique<KeyPair>(Crypto::generate_kx_keypair());
 
-        // 3. Sign our ephemeral public key with our long-term signing key
+        // 4. Sign our ephemeral public key with our long-term signing key
         Signature signature = Crypto::sign(ephemeral_kx_kp_->publicKey.data, server_sign_key_.privateKey);
 
-        // 4. Compute the session keys
+        // 5. Compute the session keys
         session_keys_ = std::make_unique<Crypto::SessionKeys>(
             Crypto::server_compute_session_keys(*ephemeral_kx_kp_, client_hello.ephemeral_pk));
 
-        // 5. Create the ServerHello message
+        // 6. Create the ServerHello message
         ServerHello hello;
         hello.selected_version = *selected_version_;
         hello.ephemeral_pk = ephemeral_kx_kp_->publicKey;
@@ -104,6 +128,14 @@ namespace ObscuraProto {
 
     std::optional<Version> Session::get_selected_version() const {
         return selected_version_;
+    }
+
+    bool Session::has_peer_identity() const {
+        return peer_identity_.has_value();
+    }
+
+    std::optional<PublicKey> Session::get_peer_identity() const {
+        return peer_identity_;
     }
 
     // --- Data Transfer ---

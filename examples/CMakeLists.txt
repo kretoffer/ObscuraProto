@@ -39,3 +39,11 @@ target_link_libraries(streaming_example
     PRIVATE
         obscuraproto
 )
+
+# Add the client identity example
+add_executable(client_identity_example client_identity_example.cpp)
+
+target_link_libraries(client_identity_example
+    PRIVATE
+        obscuraproto
+)

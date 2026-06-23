@@ -39,8 +39,8 @@ int main() {
     uint16_t port = 9003;
     ObscuraProto::net::WsServerWrapper server(server_long_term_key);
 
-    // Register a handler for the client's echo request using the new simplified API
-    server.register_request_handler(
+    // Register a handler for the client's echo request (anonymous — no client identity set)
+    server.register_anon_request_handler(
         OP_C2S_ECHO_REQUEST, [&](auto hdl, ObscuraProto::PayloadReader& reader) -> ObscuraProto::Payload {
             std::cout << "[SERVER] Received client's echo request." << std::endl;
             std::string message = reader.read_param<std::string>();

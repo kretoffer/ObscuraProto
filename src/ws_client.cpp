@@ -17,6 +17,7 @@ namespace ObscuraProto {
             client_.set_message_handler(
                 std::bind(&WsClientWrapper::on_message, this, std::placeholders::_1, std::placeholders::_2));
             client_.clear_access_channels(websocketpp::log::alevel::all);
+            client_.set_close_handshake_timeout(100);
         }
 
         WsClientWrapper::~WsClientWrapper() {
@@ -38,6 +39,10 @@ namespace ObscuraProto {
             } catch (const std::exception& e) {
                 std::cerr << "Connection failed: " << e.what() << std::endl;
             }
+        }
+
+        void WsClientWrapper::set_client_identity(KeyPair identity_kp) {
+            client_identity_kp_ = std::move(identity_kp);
         }
 
         void WsClientWrapper::disconnect() {
@@ -190,6 +195,9 @@ namespace ObscuraProto {
 
             // Start the ObscuraProto handshake
             try {
+                if (client_identity_kp_.has_value()) {
+                    session_->set_client_identity_key(*client_identity_kp_);
+                }
                 ClientHello client_hello = session_->client_initiate_handshake();
                 byte_vector request = client_hello.serialize();
                 client_.send(hdl, request.data(), request.size(), BINDATA_OPCODE);

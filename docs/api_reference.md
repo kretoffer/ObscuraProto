@@ -41,6 +41,9 @@ Defines basic structures for storing cryptographic keys and signatures.
 ### `struct ObscuraProto::PublicKey`
 Represents a public key.
 - `std::vector<uint8_t> data`: Raw bytes of the key.
+- `bool operator==(const PublicKey& other) const`: Compares two public keys by their data.
+- `bool operator!=(const PublicKey& other) const`: Inequality comparison.
+- `bool operator<(const PublicKey& other) const`: Lexicographic comparison of key data (for use in `std::map`).
 
 ### `struct ObscuraProto::PrivateKey`
 Represents a private key.
@@ -189,6 +192,9 @@ Defines the structures used during the handshake phase.
 Represents the initial message sent by the client.
 - `std::vector<Version> supported_versions`: A list of protocol versions the client supports.
 - `PublicKey ephemeral_pk`: The client's ephemeral public key for this session.
+- `bool has_client_identity`: Whether the client included an Ed25519 identity key and signature.
+- `PublicKey identity_pk`: The client's Ed25519 public key (only valid if `has_client_identity` is `true`).
+- `Signature identity_sig`: The Ed25519 signature over `ephemeral_pk.data` (only valid if `has_client_identity` is `true`).
 
 #### `byte_vector serialize() const`
 Serializes the `ClientHello` object into a byte vector for network transmission.
@@ -270,6 +276,47 @@ Sets a callback function to be invoked when a `Payload` is received from any cli
 #### `void set_on_payload_callback(OnPayloadCallback callback)`
 **Deprecated.** This method now calls `set_default_payload_handler`. Use `set_default_payload_handler` for clarity or `register_op_handler` for specific op-codes.
 
+#### `void send_anonymous(WsConnectionHdl hdl, const Payload& payload)`
+Encrypts and sends a `Payload` to an anonymous client (one that connected without identity authentication).
+- **Throws:** `LogicError` if the anonymous session is not ready.
+
+#### `void register_anon_op_handler(Payload::OpCode op_code, OnPayloadCallback callback)`
+Registers a handler for a specific operation code from **anonymous sessions** only.
+- `op_code`: The operation code to handle.
+- `callback`: The function to call. Signature: `void(WsConnectionHdl, Payload)`.
+
+#### `void register_anon_request_handler(Payload::OpCode op_code, OnRequestCallback callback)`
+Registers a simplified request-response handler for **anonymous sessions** only. The library automatically handles reading the request ID and sending the response.
+- `op_code`: The operation code of the request to handle.
+- `callback`: A function that takes a `PayloadReader&` to read the request parameters and must return a `Payload` object.
+- **Callback signature:** `std::function<Payload(WsConnectionHdl, PayloadReader&)>`
+
+#### `void set_anon_default_payload_handler(OnPayloadCallback callback)`
+Sets a default handler for any unhandled opcodes from **anonymous sessions**.
+- **Callback signature:** `std::function<void(WsConnectionHdl, Payload)>`
+
+#### `void set_client_identity_handler(IdentityHandler callback)`
+Sets a handler that is called when a client authenticates with an Ed25519 identity key during the handshake. The application decides whether to accept or reject the connection.
+- `callback`: A function that receives the connection handle and the client's Ed25519 public key. Return `true` to accept, `false` to reject (which disconnects the client).
+- **Callback signature:** `std::function<bool(WsConnectionHdl, PublicKey)>`
+
+#### `PublicKey get_client_identity(WsConnectionHdl hdl)`
+Returns the verified Ed25519 public key for an authenticated session.
+- **Throws:** `LogicError` if the session has no peer identity or is not found.
+
+#### `void send_to_identity(const PublicKey& identity_pk, const Payload& payload)`
+Sends an encrypted `Payload` to a specific client identified by their Ed25519 public key.
+- `identity_pk`: The client's Ed25519 public key.
+- **Throws:** `LogicError` if the identity is not currently connected.
+
+#### `std::future<Payload> async_request_to_identity(const PublicKey& identity_pk, const Payload& payload)`
+Sends a request to a specific client identified by their Ed25519 public key and returns a `std::future` for the response.
+- **Throws:** `LogicError` if the identity is not connected.
+
+#### `Payload sync_request_to_identity(const PublicKey& identity_pk, const Payload& payload)`
+Sends a synchronous request to a specific client identified by their Ed25519 public key and waits for the response.
+- **Throws:** `LogicError` if the identity is not connected.
+
 ---
 
 ### `class ObscuraProto::net::WsClientWrapper`
@@ -278,6 +325,10 @@ A wrapper that runs a WebSocket client to connect to a secure server.
 #### `WsClientWrapper(KeyPair server_sign_key)`
 Constructor.
 - `server_sign_key`: A `KeyPair` containing only the server's public signing key.
+
+#### `void set_client_identity(KeyPair identity_kp)`
+Sets the client's Ed25519 identity keypair for authentication. When set, the handshake will include the public key and a signature over the ephemeral key, allowing the server to verify the client's identity.
+- `identity_kp`: The client's Ed25519 keypair (public and private).
 
 #### `void connect(const std::string& uri)`
 Connects to the server at the given WebSocket URI (e.g., `ws://localhost:9002`) and starts the client thread. The handshake is initiated automatically upon connection.
@@ -381,6 +432,20 @@ Decrypts an `EncryptedPacket`. Checks the message counter for replay attack prot
 #### `bool is_handshake_complete() const`
 Checks if the handshake has been successfully completed.
 - **Returns:** `true` if the session is ready for data exchange.
+
+### Client Identity Methods
+
+#### `void set_client_identity_key(KeyPair identity_kp)`
+**For the client.** Sets the Ed25519 keypair to be used for client authentication. When set, calls to `client_initiate_handshake()` will include the public key and a signature over the ephemeral X25519 key.
+- **Throws:** `LogicError` if called on the server side.
+
+#### `bool has_peer_identity() const`
+Checks if the connected peer provided and successfully verified an Ed25519 identity.
+- **Returns:** `true` if the peer has a verified identity.
+
+#### `std::optional<PublicKey> get_peer_identity() const`
+Returns the verified Ed25519 public key of the connected peer.
+- **Returns:** The peer's public key, or `std::nullopt` if no identity was provided.
 
 ---
 

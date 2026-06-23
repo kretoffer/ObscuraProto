@@ -25,6 +25,12 @@ namespace ObscuraProto {
          */
         Session(Role role, KeyPair server_sign_key);
 
+        /**
+         * @brief [CLIENT] Sets the identity key pair for client authentication.
+         * @param identity_kp The client's Ed25519 key pair.
+         */
+        void set_client_identity_key(KeyPair identity_kp);
+
         // --- Handshake Methods ---
 
         /**
@@ -37,7 +43,8 @@ namespace ObscuraProto {
          * @brief [SERVER] Responds to a client's initiation request.
          * @param client_hello The message received from the client.
          * @return A ServerHello message to be sent back to the client.
-         * @throws ObscuraProto::RuntimeError if no compatible version is found or keys are invalid.
+         * @throws ObscuraProto::RuntimeError if no compatible version is found, keys are invalid,
+         *                                    or client identity signature verification fails.
          */
         ServerHello server_respond_to_handshake(const ClientHello& client_hello);
 
@@ -76,6 +83,20 @@ namespace ObscuraProto {
          */
         std::optional<Version> get_selected_version() const;
 
+        // --- Client Identity Methods ---
+
+        /**
+         * @brief Checks if the peer provided a verified identity.
+         * @return True if the client authenticated with an Ed25519 key.
+         */
+        bool has_peer_identity() const;
+
+        /**
+         * @brief Gets the verified public key of the peer.
+         * @return The peer's Ed25519 public key, or std::nullopt if not authenticated.
+         */
+        std::optional<PublicKey> get_peer_identity() const;
+
     private:
         Role role_;
         bool handshake_complete_ = false;
@@ -90,6 +111,10 @@ namespace ObscuraProto {
 
         // Session keys (derived from ECDH)
         std::unique_ptr<Crypto::SessionKeys> session_keys_;
+
+        // Client identity (for client-side, the keypair; for server-side, the verified peer public key)
+        std::optional<KeyPair> client_identity_kp_;
+        std::optional<PublicKey> peer_identity_;
 
         // Message counters
         uint64_t send_counter_ = 0;

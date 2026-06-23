@@ -28,6 +28,16 @@ namespace ObscuraProto {
         // Add ephemeral public key
         buffer.insert(buffer.end(), ephemeral_pk.data.begin(), ephemeral_pk.data.end());
 
+        // Add client identity flag
+        uint8_t has_id = has_client_identity ? 1 : 0;
+        buffer.push_back(has_id);
+
+        // Add identity fields if present
+        if (has_client_identity) {
+            buffer.insert(buffer.end(), identity_pk.data.begin(), identity_pk.data.end());
+            buffer.insert(buffer.end(), identity_sig.data.begin(), identity_sig.data.end());
+        }
+
         return buffer;
     }
 
@@ -60,6 +70,25 @@ namespace ObscuraProto {
         if (data.size() < offset + crypto_kx_PUBLICKEYBYTES)
             throw RuntimeError("Invalid ClientHello data: too short for public key.");
         hello.ephemeral_pk.data.assign(data.begin() + offset, data.begin() + offset + crypto_kx_PUBLICKEYBYTES);
+        offset += crypto_kx_PUBLICKEYBYTES;
+
+        // Get client identity flag
+        if (data.size() <= offset)
+            throw RuntimeError("Invalid ClientHello data: too short for identity flag.");
+        hello.has_client_identity = (data[offset] != 0);
+        offset += 1;
+
+        // Get identity fields if present
+        if (hello.has_client_identity) {
+            if (data.size() < offset + crypto_sign_PUBLICKEYBYTES)
+                throw RuntimeError("Invalid ClientHello data: too short for identity public key.");
+            hello.identity_pk.data.assign(data.begin() + offset, data.begin() + offset + crypto_sign_PUBLICKEYBYTES);
+            offset += crypto_sign_PUBLICKEYBYTES;
+
+            if (data.size() < offset + crypto_sign_BYTES)
+                throw RuntimeError("Invalid ClientHello data: too short for identity signature.");
+            hello.identity_sig.data.assign(data.begin() + offset, data.begin() + offset + crypto_sign_BYTES);
+        }
 
         return hello;
     }

@@ -9,6 +9,16 @@ namespace ObscuraProto {
     // A generic structure for a public key.
     struct PublicKey {
         std::vector<uint8_t> data;
+
+        bool operator==(const PublicKey& other) const {
+            return data == other.data;
+        }
+        bool operator!=(const PublicKey& other) const {
+            return data != other.data;
+        }
+        bool operator<(const PublicKey& other) const {
+            return data < other.data;
+        }
     };
 
     // A generic structure for a private key.

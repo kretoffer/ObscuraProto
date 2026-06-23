@@ -410,7 +410,87 @@ client.disconnect();
 server.stop();
 ```
 
-## 7. Bidirectional Streaming
+## 7. Client Identity Authentication
+
+ObscuraProto supports **optional client authentication** at the protocol level using Ed25519 digital signatures. This allows the server to verify which client is connecting and to send messages directly to a specific client by their public key.
+
+### 7.1. How It Works
+
+During the handshake, the client can include its Ed25519 public key and a signature over its ephemeral X25519 key. The server verifies the signature and, if valid, associates the connection with that public key.
+
+*   **Without identity (`has_client_identity=false`):** The session is **anonymous**. It falls into a separate handler namespace (`register_anon_*`), intended for registration, login, or other pre-authentication flows.
+*   **With identity (`has_client_identity=true`):** The client proves ownership of an Ed25519 private key. The server calls the `client_identity_handler` callback, letting the application accept or reject the connection. On acceptance, the session is fully authenticated and addressable by its public key.
+
+### 7.2. Anonymous Sessions
+
+Anonymous connections live in a completely separate namespace from authenticated ones. They have their own handler registrations:
+
+```cpp
+// Register handlers for anonymous sessions only
+server.register_anon_op_handler(REGISTER_OP, [](auto hdl, Payload payload) { ... });
+server.register_anon_request_handler(REGISTER_REQ, [](auto hdl, PayloadReader& r) -> Payload { ... });
+server.set_anon_default_payload_handler([](auto hdl, Payload payload) { ... });
+
+// Send to an anonymous client
+server.send_anonymous(hdl, payload);
+```
+
+This allows you to expose only specific operations (like registration) to anonymous users while keeping the rest of your application behind authentication.
+
+### 7.3. Setting Up Client Identity
+
+**Client side:** Generate (or load) an Ed25519 keypair and pass it to the client wrapper before connecting.
+
+```cpp
+ObscuraProto::net::WsClientWrapper client(server_public_key);
+client.set_client_identity(client_device_key);  // Ed25519 keypair
+client.connect("ws://localhost:9002");
+```
+
+**Server side:** Register an identity handler that validates the client's public key (e.g., check it exists in a database).
+
+```cpp
+server.set_client_identity_handler(
+    [](WsConnectionHdl hdl, ObscuraProto::PublicKey pk) -> bool {
+        // Return true to accept, false to reject
+        return user_database.is_key_registered(pk);
+    }
+);
+```
+
+### 7.4. Addressing Clients by Identity
+
+Once authenticated, you can send messages directly to a client by their public key. The server maintains an internal mapping of `PublicKey -> ConnectionHandle`.
+
+```cpp
+// Send a payload to a specific client
+server.send_to_identity(client_pk, payload);
+
+// Send a request and wait for response
+auto response = server.sync_request_to_identity(client_pk, request);
+```
+
+This enables server-to-client push notifications and targeted request-response without tracking raw connection handles.
+
+### 7.5. Complete Example
+
+Full working code is in `examples/client_identity_example.cpp`. The flow:
+
+1. **Anonymous** connection: client registers its Ed25519 public key with the server (via `anon_request_handler`).
+2. **Authenticated** connection: client connects again, this time with `set_client_identity()`. The handshake includes the public key + signature.
+3. Server verifies the signature, calls `client_identity_handler`, accepts the connection.
+4. Server sends a message to the client using `send_to_identity(client_pk, ...)`.
+
+### 7.6. Security Notes
+
+* Ed25519 keys are 256 bits, satisfying the protection requirement.
+* The signature proves the client possesses the corresponding private key **at the time of the handshake**, preventing impersonation.
+* Application-level key management (registration, storage, device-specific key generation, hardware binding) is entirely the responsibility of the application.
+* Anonymous sessions share the same encryption strength — they are not "less secure", just unauthorised.
+
+---
+
+## 8. Bidirectional Streaming
 
 To support real-time applications like voice/video calls or AI responses, ObscuraProto includes a high-performance, bidirectional streaming system. It operates over the same secure channel, allowing simultaneous streaming and request-response messaging or packet sending.
 
@@ -418,7 +498,7 @@ To support real-time applications like voice/video calls or AI responses, Obscur
 *   **Bidirectional:** Both the client and server can initiate streams to the other party. For a call, each side would start its own outgoing stream.
 *   **High-Throughput:** Data is sent in efficient chunks. The underlying WebSocket ensures ordered and reliable delivery, minimizing overhead.
 
-### 7.1. Stream Lifecycle and Payload Structure
+### 8.1. Stream Lifecycle and Payload Structure
 
 A stream is managed by a unique `stream_id` and a set of special operation codes. The actual stream data (e.g., a video frame) is sent as a parameter within a `STREAM_DATA` payload.
 
@@ -428,7 +508,7 @@ The payload for a `STREAM_DATA` message looks like this before encryption:
 `[OpCode (2)] + [stream_id (4)] + [data_chunk (N)]`
 
 
-### 7.3. Streaming API Usage Example
+### 8.3. Streaming API Usage Example
 
 The API is designed around two main concepts: `register_incoming_stream_handler` to receive new streams and `start_stream` to initiate one.
 
@@ -484,7 +564,7 @@ outgoing_stream->end();
 ```
 
 
-### 7.2. System Operation Codes
+### 8.2. System Operation Codes
 
 The following `OpCode`s are reserved for the internal mechanics of the ObscuraProto library. You should **not** use them for your own application logic.
 

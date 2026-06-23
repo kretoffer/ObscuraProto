@@ -41,6 +41,9 @@
 ### `struct ObscuraProto::PublicKey`
 Представляет публичный ключ.
 - `std::vector<uint8_t> data`: Сырые байты ключа.
+- `bool operator==(const PublicKey& other) const`: Сравнивает два публичных ключа по их данным.
+- `bool operator!=(const PublicKey& other) const`: Сравнение на неравенство.
+- `bool operator<(const PublicKey& other) const`: Лексикографическое сравнение данных ключа (для использования в `std::map`).
 
 ### `struct ObscuraProto::PrivateKey`
 Представляет приватный ключ.
@@ -189,6 +192,9 @@
 Представляет начальное сообщение, отправляемое клиентом.
 - `std::vector<Version> supported_versions`: Список версий протокола, которые поддерживает клиент.
 - `PublicKey ephemeral_pk`: Эфемерный публичный ключ клиента для данной сессии.
+- `bool has_client_identity`: Указывает, включил ли клиент ключ идентификации Ed25519 и подпись.
+- `PublicKey identity_pk`: Публичный ключ Ed25519 клиента (действителен только если `has_client_identity` равен `true`).
+- `Signature identity_sig`: Подпись Ed25519 над `ephemeral_pk.data` (действительна только если `has_client_identity` равен `true`).
 
 #### `byte_vector serialize() const`
 Сериализует объект `ClientHello` в байтовый вектор для передачи по сети.
@@ -270,6 +276,46 @@
 #### `void set_on_payload_callback(OnPayloadCallback callback)`
 **Устарело.** Этот метод теперь вызывает `set_default_payload_handler`. Используйте `set_default_payload_handler` для ясности или `register_op_handler` для конкретных кодов операций.
 
+#### `void send_anonymous(WsConnectionHdl hdl, const Payload& payload)`
+Шифрует и отправляет `Payload` анонимному клиенту (подключившемуся без аутентификации).
+- **Выбрасывает:** `LogicError`, если анонимная сессия не готова.
+
+#### `void register_anon_op_handler(Payload::OpCode op_code, OnPayloadCallback callback)`
+Регистрирует обработчик для конкретного кода операции от **анонимных сессий**.
+- `op_code`: Код операции для обработки.
+- `callback`: Функция для вызова. Сигнатура: `void(WsConnectionHdl, Payload)`.
+
+#### `void register_anon_request_handler(Payload::OpCode op_code, OnRequestCallback callback)`
+Регистрирует упрощенный обработчик запрос-ответ для **анонимных сессий**. Библиотека автоматически управляет чтением ID запроса и отправкой ответа.
+- `op_code`: Код операции запроса для обработки.
+- `callback`: Функция, принимающая `PayloadReader&` для чтения параметров запроса и возвращающая `Payload`.
+- **Сигнатура:** `std::function<Payload(WsConnectionHdl, PayloadReader&)>`
+
+#### `void set_anon_default_payload_handler(OnPayloadCallback callback)`
+Устанавливает обработчик по умолчанию для любых необработанных кодов операций от **анонимных сессий**.
+- **Сигнатура:** `std::function<void(WsConnectionHdl, Payload)>`
+
+#### `void set_client_identity_handler(IdentityHandler callback)`
+Устанавливает обработчик, вызываемый, когда клиент аутентифицируется с ключом Ed25519 во время рукопожатия. Приложение решает, принять или отклонить соединение.
+- `callback`: Функция, получающая дескриптор соединения и публичный ключ Ed25519 клиента. Верните `true` для принятия, `false` для отклонения (отключает клиента).
+- **Сигнатура:** `std::function<bool(WsConnectionHdl, PublicKey)>`
+
+#### `PublicKey get_client_identity(WsConnectionHdl hdl)`
+Возвращает проверенный публичный ключ Ed25519 для аутентифицированной сессии.
+- **Выбрасывает:** `LogicError`, если сессия не имеет идентификации или не найдена.
+
+#### `void send_to_identity(const PublicKey& identity_pk, const Payload& payload)`
+Отправляет зашифрованный `Payload` конкретному клиенту, идентифицированному по его публичному ключу Ed25519.
+- **Выбрасывает:** `LogicError`, если идентификация в данный момент не подключена.
+
+#### `std::future<Payload> async_request_to_identity(const PublicKey& identity_pk, const Payload& payload)`
+Отправляет запрос конкретному клиенту по его публичному ключу Ed25519 и возвращает `std::future` для ответа.
+- **Выбрасывает:** `LogicError`, если идентификация не подключена.
+
+#### `Payload sync_request_to_identity(const PublicKey& identity_pk, const Payload& payload)`
+Отправляет синхронный запрос конкретному клиенту по его публичному ключу Ed25519 и ожидает ответа.
+- **Выбрасывает:** `LogicError`, если идентификация не подключена.
+
 ---
 
 ### `class ObscuraProto::net::WsClientWrapper`
@@ -278,6 +324,10 @@
 #### `WsClientWrapper(KeyPair server_sign_key)`
 Конструктор.
 - `server_sign_key`: `KeyPair`, содержащий только публичный ключ подписи сервера.
+
+#### `void set_client_identity(KeyPair identity_kp)`
+Устанавливает пару ключей Ed25519 для аутентификации клиента. При установке рукопожатие будет включать публичный ключ и подпись эфемерного ключа, что позволит серверу проверить личность клиента.
+- `identity_kp`: Пара ключей Ed25519 клиента (публичный и приватный).
 
 #### `void connect(const std::string& uri)`
 Подключается к серверу по указанному WebSocket URI (например, `ws://localhost:9002`) и запускает клиентский поток. Рукопожатие инициируется автоматически при подключении.
@@ -381,6 +431,20 @@
 #### `bool is_handshake_complete() const`
 Проверяет, было ли успешно завершено рукопожатие.
 - **Возвращает:** `true`, если сессия готова к обмену данными.
+
+### Методы идентификации клиента
+
+#### `void set_client_identity_key(KeyPair identity_kp)`
+**Для клиента.** Устанавливает пару ключей Ed25519 для аутентификации клиента. При установке вызов `client_initiate_handshake()` будет включать публичный ключ и подпись эфемерного ключа X25519.
+- **Выбрасывает:** `LogicError`, если вызывается на стороне сервера.
+
+#### `bool has_peer_identity() const`
+Проверяет, предоставил ли подключенный клиент и была ли успешно проверена его идентификация Ed25519.
+- **Возвращает:** `true`, если у клиента есть проверенная идентификация.
+
+#### `std::optional<PublicKey> get_peer_identity() const`
+Возвращает проверенный публичный ключ Ed25519 подключенного клиента.
+- **Возвращает:** Публичный ключ клиента или `std::nullopt`, если идентификация не была предоставлена.
 
 ---
 
