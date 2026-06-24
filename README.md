@@ -1,4 +1,11 @@
-# ObscuraProto
+<p align="center">
+  <h1>ObscuraProto</h1>
+  <a href="https://github.com/kretoffer/ObscuraProto/actions"><img src="https://img.shields.io/github/actions/workflow/status/kretoffer/ObscuraProto/ci.yml?style=for-the-badge&logo=github&label=tests&color=8A2BE2" alt="Tests"></a>
+  <a href="https://github.com/kretoffer/ObscuraProto/stargazers"><img src="https://img.shields.io/github/stars/kretoffer/ObscuraProto?style=for-the-badge&logo=githubsponsors&logoColor=FFFFFF&label=stars&color=FFD700" alt="Stars"></a>
+  <a href="https://github.com/kretoffer/ObscuraProto/issues"><img src="https://img.shields.io/github/issues/kretoffer/ObscuraProto?style=for-the-badge&logo=openbugbounty&logoColor=FFFFFF&label=issues&color=FF6B6B" alt="Issues"></a>
+  <a href="https://isocpp.org"><img src="https://img.shields.io/badge/C%2B%2B-17%2B-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white" alt="C++17+"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/kretoffer/ObscuraProto?style=for-the-badge&logo=libreoffice" alt="LICENSE"></a>
+</p>
 
 This document describes the principles of the ObscuraProto **1.0** hybrid encryption protocol. This version uses elliptic curve cryptography and **ChaCha20-Poly1305**.
 
