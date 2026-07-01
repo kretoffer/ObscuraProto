@@ -21,6 +21,11 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: CCache
+      uses: hendrikmuhs/ccache-action@v1
+      with:
+        key: ${{ runner.os }}
+
     - name: Install dependencies
       run: |
         sudo apt-get update
@@ -28,7 +33,7 @@ jobs:
 
     - name: Configure CMake
       # We enable tests and examples
-      run: cmake -B build -S . -D OBSCURAPROTO_BUILD_TESTS=ON -D OBSCURAPROTO_BUILD_EXAMPLES=ON
+      run: cmake -B build -S . -D OBSCURAPROTO_BUILD_TESTS=ON -D OBSCURAPROTO_BUILD_EXAMPLES=ON -D CMAKE_CXX_COMPILER_LAUNCHER=ccache
 
     - name: Build project
       run: cmake --build build

@@ -19,6 +19,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: CCache
+        if: runner.os != 'Windows'
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: ${{ runner.os }}
+
       - name: Install dependencies (Linux)
         if: startsWith(matrix.os, 'ubuntu')
         run: |
@@ -33,7 +39,11 @@ jobs:
 
       - name: Configure CMake
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          CCACHE_FLAG=""
+          if command -v ccache &> /dev/null; then
+            CCACHE_FLAG="-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+          fi
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} $CCACHE_FLAG
 
       - name: Build project
         run: cmake --build build --config ${{ matrix.build_type }}
