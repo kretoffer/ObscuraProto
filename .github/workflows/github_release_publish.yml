@@ -29,27 +29,28 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake
+          sudo apt-get install -y build-essential cmake libsodium-dev
 
       - name: Install dependencies (macOS)
         if: startsWith(matrix.os, 'macos')
         run: |
           # Xcode command line tools are pre-installed
-          brew install cmake
+          brew install cmake libsodium
 
       - name: Configure CMake
+        shell: bash
         run: |
           CCACHE_FLAG=""
           if command -v ccache &> /dev/null; then
             CCACHE_FLAG="-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
           fi
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} $CCACHE_FLAG
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install_dir $CCACHE_FLAG
 
       - name: Build project
         run: cmake --build build --config ${{ matrix.build_type }}
 
       - name: Install project
-        run: cmake --install build --prefix install_dir --config ${{ matrix.build_type }}
+        run: cmake --install build --config ${{ matrix.build_type }}
 
       - name: Archive production artifacts (Linux)
         if: startsWith(matrix.os, 'ubuntu')
@@ -68,21 +69,21 @@ jobs:
 
       - name: Upload artifact (Linux)
         if: startsWith(matrix.os, 'ubuntu')
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: obscuraproto-linux
           path: obscuraproto-linux.tar.gz
 
       - name: Upload artifact (Windows)
         if: startsWith(matrix.os, 'windows')
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: obscuraproto-windows
           path: obscuraproto-windows.zip
 
       - name: Upload artifact (macOS)
         if: startsWith(matrix.os, 'macos')
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: obscuraproto-macos
           path: obscuraproto-macos.tar.gz
@@ -102,7 +103,7 @@ jobs:
         run: echo "changelog_body=$(cat CHANGELOG.md)" >> $GITHUB_OUTPUT
 
       - name: Download all build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
 
