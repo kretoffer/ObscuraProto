@@ -68,21 +68,21 @@ jobs:
 
       - name: Upload artifact (Linux)
         if: startsWith(matrix.os, 'ubuntu')
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: obscuraproto-linux
           path: obscuraproto-linux.tar.gz
 
       - name: Upload artifact (Windows)
         if: startsWith(matrix.os, 'windows')
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: obscuraproto-windows
           path: obscuraproto-windows.zip
 
       - name: Upload artifact (macOS)
         if: startsWith(matrix.os, 'macos')
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: obscuraproto-macos
           path: obscuraproto-macos.tar.gz
