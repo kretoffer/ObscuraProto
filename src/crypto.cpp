@@ -1,6 +1,5 @@
 #include "obscuraproto/crypto.hpp"
 
-#include <arpa/inet.h>  // For htons, ntohs
 #include <sodium.h>
 
 #include <atomic>
@@ -8,7 +7,7 @@
 #include "obscuraproto/errors.hpp"
 
 // Helper for 64-bit network byte order conversion
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#if defined(_WIN32) || (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 static uint64_t htonll_local(uint64_t val) {
     return (((uint64_t) htonl(val)) << 32) + htonl(val >> 32);
 }

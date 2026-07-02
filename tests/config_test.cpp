@@ -1,9 +1,10 @@
 #include "obscuraproto/config.hpp"
 
 #include <gtest/gtest.h>
-#include <unistd.h>
 
+#include <filesystem>
 #include <fstream>
+#include <random>
 
 namespace ObscuraProto {
     namespace {
@@ -38,16 +39,12 @@ namespace ObscuraProto {
         }
 
         std::string write_test_yaml(const std::string& content) {
-            char tmpl[] = "/tmp/obscuraproto_config_test_XXXXXX";
-            int fd = mkstemp(tmpl);
-            if (fd == -1) {
-                return "";
-            }
-            std::ofstream file(tmpl);
+            auto tmp_path = std::filesystem::temp_directory_path() /
+                            ("obscuraproto_config_test_" + std::to_string(std::random_device{}()));
+            std::ofstream file(tmp_path);
             file << content;
             file.close();
-            close(fd);
-            return std::string(tmpl);
+            return tmp_path.string();
         }
 
         TEST(ConfigTest, LoadsFromYaml) {

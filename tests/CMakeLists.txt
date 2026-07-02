@@ -1,6 +1,7 @@
 # tests/CMakeLists.txt
 
 # Google Test
+set(gtest_force_shared_crt ON CACHE BOOL "Use shared (DLL) run-time lib" FORCE)
 include(FetchContent)
 FetchContent_Declare(
   googletest

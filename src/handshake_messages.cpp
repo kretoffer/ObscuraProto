@@ -1,6 +1,5 @@
 #include "obscuraproto/handshake_messages.hpp"
 
-#include <arpa/inet.h>
 #include <sodium.h>
 
 #include "obscuraproto/errors.hpp"

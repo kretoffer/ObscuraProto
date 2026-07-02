@@ -1,7 +1,5 @@
 #include "obscuraproto/packet.hpp"
 
-#include <arpa/inet.h>  // For htons, ntohs, htonl, ntohl
-
 #include "obscuraproto/errors.hpp"
 
 namespace ObscuraProto {

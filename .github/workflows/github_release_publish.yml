@@ -31,6 +31,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake libsodium-dev
 
+      - name: Install dependencies (Windows)
+        if: startsWith(matrix.os, 'windows')
+        shell: pwsh
+        run: |
+          vcpkg install libsodium --triplet x64-windows
+          echo "CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Install dependencies (macOS)
         if: startsWith(matrix.os, 'macos')
         run: |
@@ -44,7 +51,7 @@ jobs:
           if command -v ccache &> /dev/null; then
             CCACHE_FLAG="-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
           fi
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install_dir $CCACHE_FLAG
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} "-DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install_dir" $CCACHE_FLAG
 
       - name: Build project
         run: cmake --build build --config ${{ matrix.build_type }}

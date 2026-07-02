@@ -7,6 +7,14 @@ project(ObscuraProto VERSION 1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Use shared (dynamic) MSVC runtime for all targets including FetchContent'd deps
+if(MSVC)
+    if(POLICY CMP0091)
+        cmake_policy(SET CMP0091 NEW)
+    endif()
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif()
+
 # Set a minimum policy version to allow older CMake scripts from dependencies to run.
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
@@ -24,6 +32,16 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(asio)
 
 # Declare websocketpp dependency
+# Force C++11 mode to avoid Boost dependency on MSVC
+add_compile_definitions(
+    _WEBSOCKETPP_CPP11_TYPE_TRAITS_
+    _WEBSOCKETPP_CPP11_MEMORY_
+    _WEBSOCKETPP_CPP11_THREAD_
+    _WEBSOCKETPP_CPP11_FUNCTIONAL_
+    _WEBSOCKETPP_CPP11_SYSTEM_ERROR_
+    _WEBSOCKETPP_CPP11_RANDOM_DEVICE_
+    _WEBSOCKETPP_CPP11_CHRONO_
+)
 FetchContent_Declare(
     websocketpp
     GIT_REPOSITORY https://github.com/zaphoyd/websocketpp.git
@@ -106,6 +124,10 @@ target_compile_definitions(obscuraproto
 
 # Link external libraries
 find_package(Threads REQUIRED)
+
+if(WIN32)
+    target_link_libraries(obscuraproto PUBLIC ws2_32)
+endif()
 
 if(TARGET PkgConfig::LIBSODIUM)
     target_link_libraries(obscuraproto
